@@ -1,0 +1,15 @@
+Pot Commun est un gestionnaire de dettes informelles entres amis.
+
+L'idée est basiquement de simplifier la gestion financière lors d'un voyage entre amis.
+
+Supposons que vous partiez à 4 à la montagne. Vous devrez faire des courses, dont le montant sera divisé de façon équitable. Vous irez aussi plusieurs fois au restaurant, prenant des plats différents dont le prix n'est pas forcément le même. À mois que vous soyez tous très aisé, certains feront plus attention à ce qu'ils prennent que d'autres. Autre exemple, certains ne voudront pas faire un repas complet à midi, alors que d'autres au contraire voudront faire un repas consistant. Souvent, les commerçants rechigneront à faire une note par personne, et diviser la note simplement par le nombre de participant risque de faire grincer quelques dents (surtout celles de ceux qui se sont restraint...).
+
+La solution que j'ai adopté (avec mes amis) est plus complexe qu'une simple division, mais permet :
+    - de simplifier le passage à la caisse : une personne avant les sous pour tout le monde (cette personne changeant à chaque addition)
+    - de rester juste vis-à-vis de tout le monde : la personne qui ne mange et boit pas beaucoup ne paye pas le festin des autres
+
+Dans la pratique, à chaque note, on met en retrait di ticket qui a prit quoi. À la fin, on met en correspondance les avances et les consommations de chacun et ceux qui ont moins payés remboursent ceux qui ont payés plus.
+
+Le seul inconvénient est qu'il faut "faire les comptes" à la fin des vacances, et cette opération est un peu délicate puisque qu'elle demande plusieurs calculs et de la rigueur.
+
+Pot-commun est là pour automatiser ce calcul final.
