@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from unittest import TestCase
 
 from datetime import datetime
@@ -6,7 +8,7 @@ from potcommun import DebtManager
 class Tests(TestCase):
     def test_void(self):
         self.assertEqual(1, 1)
-        
+
     def test_api(self):
         """
             Bob and Alice go to a restaurant, and after that to the cinema.
