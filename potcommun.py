@@ -69,7 +69,8 @@ class DebtManager(object):
 
         return itemsTotals, paymentTotals
 
-    def computeBalances(self, totals):
+    def computeBalances(self):
+        totals = self.computeTotals()
         result = {}
         for name in totals[0].keys():
             result[name] = totals[0][name] - totals[1][name]
@@ -84,7 +85,8 @@ class DebtManager(object):
             del balances[name]
         return balances
 
-    def aggregateDebts(self, balances):
+    def computeDebts(self):
+        balances = self.computeBalances()
         debts = []
         balances = self.filterNull(balances)
         while len(balances) > 1:
@@ -107,12 +109,6 @@ class DebtManager(object):
         if len(balances) > 0:
             raise RuntimeError("Wrong balances!")
         return tuple(debts)
-
-    def computeDebts(self):
-        totals = self.computeTotals()
-        balances = self.computeBalances(totals)
-        debts = self.aggregateDebts(balances)
-        return debts
 
 class Outlay(object):
     def __init__(self, mgr, date, label):

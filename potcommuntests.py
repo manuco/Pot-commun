@@ -82,14 +82,12 @@ class Tests(TestCase):
         r = Payment.mergeTotals({"A": 5, "B": 7}, {"A": 5, "C": 3})
         self.assertEqual(r, {"A": 10, "B": 7, "C": 3})
 
-
-
     def test_compute_totals(self):
         r = self.mgr.computeTotals()
         self.assertEqual(r, ({"Alice": 3500, "Bob": 4500}, {"Alice": 6000, "Bob": 2000}))
 
     def test_compute_balances(self):
-        r = self.mgr.computeBalances(self.mgr.computeTotals())
+        r = self.mgr.computeBalances()
         self.assertEqual(r, {"Alice": -2500, "Bob": 2500})
 
     def test_checkAndAdjustTotals(self):
