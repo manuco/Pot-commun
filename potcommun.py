@@ -20,7 +20,7 @@ class DebtManager(object):
         """
             Return a new outlay.
         """
-        outlay = Outlay(self)
+        outlay = Outlay(self, label)
         self.outlays[outlay.getId()] = outlay
         return outlay
 
@@ -28,31 +28,31 @@ class DebtManager(object):
         return self.outlays[oid]
 
     @staticmethod
-    def checkAndAdjustTotals(items, payments):
+    def checkAndAdjustTotals(persons, items, payments):
         """
             Adjust income and outcome in order to complete them with missing operations
         """
-        names = set(items.keys() + payments.keys())
         itemsTotal = sum(items.values())
         paymentsTotal = sum(payments.values())
 
         if itemsTotal > paymentsTotal:
             missingAmount = itemsTotal - paymentsTotal
-            missingPerPerson = missingAmount // len(names)
-            elem = payments
+            missingPerPerson = missingAmount // len(persons)
+            elemToAdjust = payments
         elif itemsTotal < paymentsTotal:
             missingAmount = paymentsTotal - itemsTotal
-            missingPerPerson = missingAmount // len(names)
-            elem = items
+            missingPerPerson = missingAmount // len(persons)
+            elemToAdjust = items
         else:
-            names = []
+            elemToAdjust = None
 
-        for name in names:
-            if name in elem.keys():
-                elem[name] += missingPerPerson
-            else:
-                elem[name] = missingPerPerson
-
+        for person in persons:
+            for elem in [items, payments]:
+                value = missingPerPerson if elem is elemToAdjust else 0
+                if person in elem.keys():
+                    elem[person] += value
+                else:
+                    elem[person] = value
 
         return items, payments
 
@@ -60,12 +60,12 @@ class DebtManager(object):
         itemsTotals = {}
         paymentTotals = {}
         for outlay in self.outlays.values():
-            totals = Item.computeTotals(outlay.items)
-            itemsTotals = Item.mergeTotals(itemsTotals, totals)
-            totals = Payment.computeTotals(outlay.payments)
-            paymentTotals = Payment.mergeTotals(paymentTotals, totals)
+            perOutlayItemsTotals = AbstractPayment.computeTotals(outlay.items)
+            perOutlayPaymentsTotals = AbstractPayment.computeTotals(outlay.payments)
+            perOutlayItemsTotals, perOutlayPaymentsTotals = self.checkAndAdjustTotals(outlay.persons, perOutlayItemsTotals, perOutlayPaymentsTotals)
+            itemsTotals = Item.mergeTotals(itemsTotals, perOutlayItemsTotals)
+            paymentTotals = Payment.mergeTotals(paymentTotals, perOutlayPaymentsTotals)
 
-        self.checkAndAdjustTotals(itemsTotals, paymentTotals)
 
         return itemsTotals, paymentTotals
 
@@ -87,7 +87,7 @@ class DebtManager(object):
     def aggregateDebts(self, balances):
         debts = []
         balances = self.filterNull(balances)
-        while len(balances):
+        while len(balances) > 1:
             names = balances.keys()
             names.sort(cmp=lambda x, y: cmp(balances[x], balances[y]))
             pa = balances[names[0]]
@@ -103,6 +103,9 @@ class DebtManager(object):
                 balances[names[-1]] += pa
 
             balances = self.filterNull(balances)
+
+        if len(balances) > 0:
+            raise RuntimeError("Wrong balances!")
         return tuple(debts)
 
     def computeDebts(self):
@@ -112,27 +115,34 @@ class DebtManager(object):
         return debts
 
 class Outlay(object):
-    def __init__(self, mgr):
+    def __init__(self, mgr, label):
         self.mgr = mgr
+        self.label = label
         self.items = []
         self.payments = []
+        self.persons = set()
 
     def addItem(self, persons, label, amount):
+        self.addPersons(persons)
         item = Item(persons, label, amount)
         self.items.append(item)
 
     def addPayment(self, persons, amount):
+        self.addPersons(persons)
         payment = Payment(persons, amount)
         self.payments.append(payment)
+
+    def addPersons(self, persons):
+        if type(persons) in (type(""), type(u"")):
+            raise ValueError("persons must be a non string iterable")
+        self.persons.update(persons)
 
     def getId(self):
         return id(self)
 
 class AbstractPayment(object):
     def __init__(self, persons, amount):
-        if type(persons) in (type(""), type(u"")):
-            persons = (persons,)
-        self.persons = tuple(persons)
+        self.persons = set(persons)
         self.amount = amount
 
     @staticmethod
@@ -140,11 +150,14 @@ class AbstractPayment(object):
         results = {}
         for payment in payments:
             divisor = len(payment.persons)
+            roundingError = payment.amount - ((payment.amount // divisor) * divisor)
             for person in payment.persons:
+                amount = payment.amount // divisor + (1 if roundingError > 0 else 0)
+                roundingError -= 1
                 if person in results.keys():
-                    results[person] += payment.amount // divisor
+                    results[person] += amount
                 else:
-                    results[person] = payment.amount // divisor
+                    results[person] = amount
         return results
 
     @staticmethod
