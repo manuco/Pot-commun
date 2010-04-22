@@ -3,7 +3,66 @@ from __future__ import division
 
 class DebtManager(object):
     """
-        A debt manager, core of this module
+        A debt manager, core of this module.
+
+        This manager handles all spendings of a journey, called outlays.
+
+        Each outlay is connected (more or less) with a receipt a merchant gives
+        you when you pay for something.
+
+        For each outlay, you can specify:
+        - who is consuming (and what)
+        - who is paying (and what)
+
+        Each outlay is composed of items (what is bought, who and how much), and payments
+        (who paid, and how much). If payments and items amounts are not equals,
+        the missing part is dispatched among this outlay's participating people.
+
+        For example: let imagine you go to a restaurant then to the cinema for two of us.
+        You are three friends (A, B and C)
+        A and B eat a common meal for 25 €
+        C eats for 15 €
+        B and C drink a common bottle of wine which cost 20 €
+        B pays for the complete meal (25 + 15 + 20 = 60 €).
+
+        Then A and B go to the cinema (9€ entrance fee), A pays (18 €) and debts
+        calculations will be done later.
+
+        You'll have two outlays in the manager: one for the restaurant, and one
+        for the cinema.
+
+        For the first one, you'll add theses items:
+        A & B's meal: 25 €
+        C's meal: 15 €
+        B & C's wine: 20 €
+        payment:
+        B: 60 €
+
+        Then the second outlay :
+        persons: A and B
+        payment: A: 18 €
+
+        (In the case someone is paying for something he doesn't participate
+        is handled by explicitly adding the fees for the persons participating)
+
+        Then the DebtManager would tell you that :
+        C owe 25 € B (his meal (15 €) + half the wine (10 €) == 25 €, all's okay)
+        A owe 4 € B (Meal is 12,50 € - 9 € == 4€) (including rounding errors :-) )
+
+        The Python way :
+        >>> from potcommun import DebtManager
+        >>> mgr = DebtManager()
+        >>> o1=mgr.addOutlay(None, "Restaurant")  # None is a placeholder for a date
+        >>> o1.addItem(("A", "B"), "meal A & B", 25)
+        >>> o1.addItem(("C",), "meal C", 15)
+        >>> o1.addItem(("B","C",), "wine B & C", 20)
+        >>> o1.addPayment(("B",), 60)
+        >>> o2=mgr.addOutlay(None, "Cinema")
+        >>> o2.addPersons(("A", "B"))  # No details about items : auto-adjustment will be done
+        >>> o2.addPayment(("A",), 18)
+        >>> mgr.computeDebts()
+        (('C', 25, 'B'), ('A', 4, 'B'))
+
     """
 
     def __init__(self):
