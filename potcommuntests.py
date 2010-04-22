@@ -13,13 +13,13 @@ class Tests(TestCase):
         mgr = DebtManager()
         mgr.addPerson("Alice")
         mgr.addPerson("Bob")
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
         outlay.addItem(("Alice",), "Starter", 500)
         outlay.addItem(("Alice",), "Course", 2000)
         outlay.addItem(("Bob",), "Course", 2500)
         outlay.addItem(("Bob",), "Wine", 1000)
         outlay.addPayment(("Alice",), 6000)
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         outlay.addItem(("Alice", "Bob"), "ticket", 2000)
         outlay.addPayment(("Bob",), 2000)
         self.mgr = mgr
@@ -40,7 +40,7 @@ class Tests(TestCase):
         mgr.addPerson("Bob")
 
         # When, what, how much, in cents
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
         # Who has consummed, what, how much
         outlay.addItem(("Alice",), "Starter", 500)
         outlay.addItem(("Alice",), "Course", 2000)
@@ -49,7 +49,7 @@ class Tests(TestCase):
         # Who, how much
         outlay.addPayment(("Alice",), 6000)
 
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         # Who has consummed, what, how much
         outlay.addItem(("Alice", "Bob"), "ticket", 2000)
         # Who, how much
@@ -68,7 +68,7 @@ class Tests(TestCase):
 
     def test_mgr(self):
         mgr = DebtManager()
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 5000)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
         other = mgr.getOutlay(outlay.getId())
 
 
@@ -110,12 +110,53 @@ class Tests(TestCase):
         mgr = DebtManager()
         mgr.addPerson("Alice")
         mgr.addPerson("Bob")
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         outlay.addPayment(("Bob",), 2000)
         outlay.addPersons(("Alice",))
         result = mgr.computeDebts()
         expected = (("Alice", 1000, "Bob"),)
         self.assertEqual(result, expected)
+
+    def test_void_operation(self):
+        mgr = DebtManager()
+        result = mgr.computeDebts()
+        expected = ()
+        self.assertEqual(result, expected)
+
+        mgr.addPerson("Alice")
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T1")
+        outlay.addItem(("Alice",), "A", 1)
+
+        result = mgr.computeDebts()
+        expected = ()
+        self.assertEqual(result, expected)
+
+        mgr.addPerson("Bob")
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T2")
+        outlay.addItem(("Alice",), "A", 1)
+        outlay.addItem(("Bob",), "B", 1)
+
+        result = mgr.computeDebts()
+        expected = ()
+        self.assertEqual(result, expected)
+
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T3")
+        outlay.addItem(("Alice",), "A", 1)
+        outlay.addItem(("Bob",), "B", 1)
+        outlay.addPayment(("Alice", "Bob"), 2)
+
+        result = mgr.computeDebts()
+        expected = ()
+        self.assertEqual(result, expected)
+
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T4")
+        outlay.addItem(("Alice",), "A", 1)
+        outlay.addPayment(("Bob",), 1)
+
+        result = mgr.computeDebts()
+        expected = (("Alice", 1, "Bob"), )
+        self.assertEqual(result, expected)
+
 
     def test_real_example(self):
         mgr = DebtManager()
@@ -125,7 +166,7 @@ class Tests(TestCase):
         mgr.addPerson("Daniel")
         mgr.addPerson("Empu")
 
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T1", 9300)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T1")
         outlay.addItem(("Alice",), "A", 1500)
         outlay.addItem(("Bob",), "B", 1700)
         outlay.addItem(("Cesar",), "C", 1600)
@@ -134,24 +175,24 @@ class Tests(TestCase):
         outlay.addItem(("Alice", "Bob", "Cesar", "Daniel"), "F", 2000)
         outlay.addPayment(("Alice",), 9300)
 
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T2", 7500)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T2")
         outlay.addPersons(("Alice", "Bob", "Cesar", "Daniel", "Empu"))
         outlay.addPayment(("Bob",), 7500)
 
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T3", 2600)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T3")
         outlay.addItem(("Alice",), "A", 1000)
         outlay.addItem(("Bob",), "B", 700)
         outlay.addItem(("Cesar",), "C", 900)
         outlay.addPayment(("Cesar",), 2600)
 
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T4", 2800)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T4")
         outlay.addItem(("Alice",), "A", 700)
         outlay.addItem(("Bob",), "B", 700)
         outlay.addItem(("Daniel",), "D", 700)
         outlay.addItem(("Empu",), "E", 700)
         outlay.addPayment(("Daniel",), 2800)
 
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T5", 9000)
+        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "T5")
         outlay.addItem(("Alice",), "A", 1800)
         outlay.addItem(("Bob",), "B", 1500)
         outlay.addItem(("Cesar",), "C", 2000)

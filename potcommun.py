@@ -16,11 +16,11 @@ class DebtManager(object):
         else:
             raise ValueError("Already registered")
 
-    def addOutlay(self, date, label, totalAmount):
+    def addOutlay(self, date, label):
         """
             Return a new outlay.
         """
-        outlay = Outlay(self, label)
+        outlay = Outlay(self, date, label)
         self.outlays[outlay.getId()] = outlay
         return outlay
 
@@ -115,8 +115,9 @@ class DebtManager(object):
         return debts
 
 class Outlay(object):
-    def __init__(self, mgr, label):
+    def __init__(self, mgr, date, label):
         self.mgr = mgr
+        self.date = date
         self.label = label
         self.items = []
         self.payments = []
