@@ -65,14 +65,6 @@ class Tests(TestCase):
         self.assertEqual(result, expected)
 
 
-
-    def test_mgr(self):
-        mgr = DebtManager()
-        outlay = mgr.addOutlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
-        other = mgr.getOutlay(outlay.getId())
-
-
-
     def test_abstract_payments_totals(self):
         payments = (Payment(("A", "B"), 4), Payment(("A",), 3), Payment(("B",), 5))
         r = Payment.computeTotals(payments)

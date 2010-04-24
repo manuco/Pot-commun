@@ -66,12 +66,12 @@ class DebtManager(object):
     """
 
     def __init__(self):
-        self.persons = []
-        self.outlays = {}
+        self.persons = set()
+        self.outlays = set()
 
     def addPerson(self, name):
-        if name not in self.persons:
-            self.persons.append(name)
+        if  p not in self.persons:
+            self.persons.add(p)
         else:
             raise ValueError("Already registered")
 
@@ -80,11 +80,8 @@ class DebtManager(object):
             Return a new outlay.
         """
         outlay = Outlay(self, date, label)
-        self.outlays[outlay.getId()] = outlay
+        self.outlays.add(outlay)
         return outlay
-
-    def getOutlay(self, oid):
-        return self.outlays[oid]
 
     @staticmethod
     def checkAndAdjustTotals(persons, items, payments):
@@ -118,7 +115,7 @@ class DebtManager(object):
     def computeTotals(self):
         itemsTotals = {}
         paymentTotals = {}
-        for outlay in self.outlays.values():
+        for outlay in self.outlays:
             perOutlayItemsTotals = AbstractPayment.computeTotals(outlay.items)
             perOutlayPaymentsTotals = AbstractPayment.computeTotals(outlay.payments)
             perOutlayItemsTotals, perOutlayPaymentsTotals = self.checkAndAdjustTotals(outlay.persons, perOutlayItemsTotals, perOutlayPaymentsTotals)
