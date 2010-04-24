@@ -173,19 +173,19 @@ class Outlay(object):
         self.mgr = mgr
         self.date = date
         self.label = label
-        self.items = []
-        self.payments = []
+        self.items = set()
+        self.payments = set()
         self.persons = set()
 
     def addItem(self, persons, label, amount):
         self.addPersons(persons)
         item = Item(persons, label, amount)
-        self.items.append(item)
+        self.items.add(item)
 
     def addPayment(self, persons, amount):
         self.addPersons(persons)
         payment = Payment(persons, amount)
-        self.payments.append(payment)
+        self.payments.add(payment)
 
     def addPersons(self, persons):
         if type(persons) in (type(""), type(u"")):
@@ -229,8 +229,8 @@ class Payment(AbstractPayment):
 
 class Item(AbstractPayment):
     def __init__(self, persons, label, amount):
-        self.label = label
         AbstractPayment.__init__(self, persons, amount)
+        self.label = label
 
 class Person(object):
     def __init__(self, name):
