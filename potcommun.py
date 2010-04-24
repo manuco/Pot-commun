@@ -70,10 +70,12 @@ class DebtManager(object):
         self.outlays = set()
 
     def addPerson(self, name):
+        p = Person(name)
         if  p not in self.persons:
             self.persons.add(p)
         else:
             raise ValueError("Already registered")
+        return p
 
     def addOutlay(self, date, label):
         """
@@ -230,10 +232,20 @@ class Item(AbstractPayment):
         self.label = label
         AbstractPayment.__init__(self, persons, amount)
 
+class Person(object):
+    def __init__(self, name):
+        if type(name) == type(""):
+            self.name = name.decode("utf-8")
+        elif type(name) == type(u""):
+            self.name = name
+        else:
+            raise ValueError("name should be a string!")
 
+    def __hash__(self):
+        return hash(self.name)
 
-
-
+    def __eq__(self, other):
+        return self.name == other.name
 
 
 
