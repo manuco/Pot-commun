@@ -69,19 +69,22 @@ class DebtManager(object):
         self.persons = set()
         self.outlays = set()
 
-    def addPerson(self, name):
-        p = Person(name)
+    def save(self, *args):
+        # In memory saving, nothing to do...
+        pass
+
+    def addPerson(self, p):
         if  p not in self.persons:
             self.persons.add(p)
         else:
             raise ValueError("Already registered")
         return p
 
-    def addOutlay(self, date, label):
+    def addOutlay(self, outlay):
         """
             Return a new outlay.
         """
-        outlay = Outlay(self, date, label)
+        outlay.mgr = self
         self.outlays.add(outlay)
         return outlay
 
@@ -169,22 +172,19 @@ class DebtManager(object):
         return tuple(debts)
 
 class Outlay(object):
-    def __init__(self, mgr, date, label):
-        self.mgr = mgr
+    def __init__(self, date, label):
         self.date = date
         self.label = label
         self.items = set()
         self.payments = set()
         self.persons = set()
 
-    def addItem(self, persons, label, amount):
-        self.addPersons(persons)
-        item = Item(persons, label, amount)
+    def addItem(self, item):
+        self.addPersons(item.persons)
         self.items.add(item)
 
-    def addPayment(self, persons, amount):
-        self.addPersons(persons)
-        payment = Payment(persons, amount)
+    def addPayment(self, payment):
+        self.addPersons(payment.persons)
         self.payments.add(payment)
 
     def addPersons(self, persons):
@@ -247,7 +247,8 @@ class Person(object):
     def __eq__(self, other):
         return self.name == other.name
 
-
+class Handler(object):
+    pass
 
 
 
