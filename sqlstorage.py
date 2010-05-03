@@ -2,20 +2,24 @@
 from __future__ import division
 
 from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-from sqlmodel import metadata
+from sqlmodel import metadata, DebtManager, Person, Outlay, Item, Payment
 
 URL = "sqlite:///potcommun.db"
 
 class Handler(object):
-    def __init__(self, url=URL, echo=False):
+    def __init__(self, url=URL, echo=True):
         self.engine = create_engine(url, echo=echo)
+        self.Session = sessionmaker(bind=self.engine)
         self.initializeBase()
 
     def initializeBase(self):
-        metadata.create_all(self.engine)
+        metadata.bind = self.engine
+        metadata.create_all()
 
-
+    def getSession(self):
+        return Session()
 
 
 
