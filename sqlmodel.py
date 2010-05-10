@@ -24,29 +24,11 @@ class Person(potcommun.Person, Base):
     oid = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
 
-    #def __init__(self, name):
-        #potcommun.Person.__init__(self, name)
-        #Base.__init__(self)
-
 class DebtManager(potcommun.DebtManager, Base):
     __tablename__ = "DebtManagers"
     oid = Column(Integer, primary_key=True)
     name = Column(String)
     persons = relationship(Person, secondary=dmgr_persons, collection_class=set)
-
-    #def __init__(self):
-        #potcommun.DebtManager.__init__(self)
-        #Base.__init__(self)
-
-
-
-    def save(self, handler):
-        session = handler.getSession()
-        session.begin()
-        session.add(self)
-        session.commit()
-
-
     outlays = relationship("Outlay", collection_class=set)
 
 class Outlay(potcommun.Outlay, Base):
@@ -58,11 +40,6 @@ class Outlay(potcommun.Outlay, Base):
     items = relationship("Item", collection_class=set)
     payments = relationship("Payment", collection_class=set)
 
-    #def __init__(self, mgr, date, label):
-        #potcommun.Outlay.__init__(self, mgr, date, label)
-        #Base.__init__(self)
-
-
 class AbstractPayment(potcommun.AbstractPayment, Base):
 
     oid = Column(Integer, primary_key=True)
@@ -72,10 +49,6 @@ class AbstractPayment(potcommun.AbstractPayment, Base):
     persons = relationship(Person, secondary=persons_payments, collection_class=set)
 
     __tablename__ = "AbstractPayments"
-
-    #def __init__(self, persons, amount):
-        #potcommun.AbstractPayment.__init__(self, persons, amount)
-        #Base.__init__(self)
     __mapper_args__ = {
         'polymorphic_on': classType,
     }
@@ -84,9 +57,6 @@ class Payment(potcommun.Payment, AbstractPayment):
 
     oid = Column(Integer, ForeignKey("AbstractPayments.oid"), primary_key=True)
     __tablename__ = "Payments"
-    #def __init__(self, persons, amount):
-        #potcommun.Payment.__init__(self, persons, amount)
-        #Base.__init__(self)
     __mapper_args__ = {
         'polymorphic_identity': 'payment',
     }
@@ -96,9 +66,6 @@ class Item(potcommun.Item, AbstractPayment):
     oid = Column(Integer, ForeignKey("AbstractPayments.oid"), primary_key=True)
     label = Column(String, nullable=False)
     __tablename__ = "Items"
-    #def __init__(self, persons, label, amount):
-        #potcommun.Item.__init__(self, persons, label, amount)
-        #Base.__init__(self)
     __mapper_args__ = {
         'polymorphic_identity': 'item',
     }

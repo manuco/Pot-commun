@@ -12,19 +12,28 @@ class Handler(object):
     def __init__(self, url=URL, echo=True):
         self.engine = create_engine(url, echo=echo)
         self.Session = sessionmaker(bind=self.engine)
-        self.initializeBase()
+        self.initialize()
 
-    def initializeBase(self):
+    def purge(self):
+        metadata.bind = self.engine
+        metadata.drop_all()
+        self.initialize()
+
+    def initialize(self):
         metadata.bind = self.engine
         metadata.create_all()
 
     def getSession(self):
-        return Session()
+        return self.Session()
 
+    def saveDebtManager(self, debtManager):
+        session = self.getSession()
+        session.add(debtManager)
+        session.commit()
 
-
-
-
+    def getManagers(self):
+        session = self.getSession()
+        raise RuntimeError("To be contineud")
 
 
 

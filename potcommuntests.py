@@ -233,5 +233,6 @@ class Tests(TestCase):
 
 
     def test_save(self):
+        self.saveHandler.purge()
         self.mgr.save(self.saveHandler)
 
