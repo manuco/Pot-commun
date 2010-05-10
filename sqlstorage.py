@@ -33,7 +33,7 @@ class Handler(object):
 
     def getManagers(self):
         session = self.getSession()
-        raise RuntimeError("To be contineud")
+        return session.query(DebtManager)
 
 
 

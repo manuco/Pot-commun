@@ -10,7 +10,6 @@ class Tests(TestCase):
         self.assertEqual(1, 1)
 
     def setUp(self):
-        self.saveHandler = Handler()
 
         mgr = DebtManager()
         self.alice = alice = mgr.addPerson(Person("Alice"))
@@ -231,8 +230,15 @@ class Tests(TestCase):
         )
         self.assertEqual(result, expected)
 
-
     def test_save(self):
-        self.saveHandler.purge()
-        self.mgr.save(self.saveHandler)
+
+        saveHandler = Handler(echo=False)
+        saveHandler.purge()
+        saveHandler.saveDebtManager(self.mgr)
+        del saveHandler
+
+        db = Handler(echo=False)
+        dm = db.getManagers()[0]
+        r = dm.computeBalances()
+        self.assertEqual(r, {self.alice: -2500, self.bob: 2500})
 
