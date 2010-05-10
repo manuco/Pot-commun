@@ -19,6 +19,11 @@ persons_payments = Table('persons_payments', metadata,
     Column('payments_oid', Integer, ForeignKey('AbstractPayments.oid')),
 )
 
+persons_outlays = Table('persons_outlays', metadata,
+    Column('person_oid', Integer, ForeignKey('Persons.name')),
+    Column('outlay_oid', Integer, ForeignKey('Outlays.oid')),
+)
+
 class Person(potcommun.Person, Base):
     __tablename__ = "Persons"
     name = Column(String, primary_key=True, nullable=False, unique=True)
@@ -38,6 +43,7 @@ class Outlay(potcommun.Outlay, Base):
     label = Column(String)
     items = relationship("Item", collection_class=set)
     payments = relationship("Payment", collection_class=set)
+    persons = relationship(Person, secondary=persons_outlays, collection_class=set)
 
 class AbstractPayment(potcommun.AbstractPayment, Base):
 
