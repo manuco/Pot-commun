@@ -235,7 +235,7 @@ class Tests(TestCase):
         saveHandler = Handler(echo=False)
         saveHandler.purge()
         saveHandler.saveDebtManager(self.mgr)
-        del saveHandler
+        del saveHandler, self.mgr
 
         db = Handler(echo=False)
         dm = db.getManagers()[0]
