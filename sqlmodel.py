@@ -33,6 +33,7 @@ class Person(potcommun.Person, Base):
 class DebtManager(potcommun.DebtManager, Base):
     __tablename__ = "DebtManagers"
     oid = Column(Integer, primary_key=True)
+    name = Column(String)
     persons = relationship(Person, secondary=dmgr_persons, collection_class=set)
 
     #def __init__(self):
