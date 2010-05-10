@@ -69,16 +69,20 @@ class DebtManager(object):
         self.persons = set()
         self.outlays = set()
 
-    def save(self, *args):
-        # In memory saving, nothing to do...
-        pass
-
     def addPerson(self, p):
+        if type(p) in (type(""), type(u"")):
+            raise ValueError("Person should not be a string.")
+
         if  p not in self.persons:
             self.persons.add(p)
         else:
             raise ValueError("Already registered")
         return p
+
+    def getPerson(self, name):
+        for person in self.persons:
+            if name == person.name:
+                return person
 
     def addOutlay(self, outlay):
         """
@@ -197,6 +201,10 @@ class Outlay(object):
 
 class AbstractPayment(object):
     def __init__(self, persons, amount):
+        for person in persons:
+            if type(person) in (type(""), type(u"")):
+                raise ValueError("Persons should not be a string: %s." % person)
+
         self.persons = set(persons)
         self.amount = amount
 
@@ -247,8 +255,21 @@ class Person(object):
     def __eq__(self, other):
         return self.name == other.name
 
+    def __repr__(self):
+        return "Person('%s')" % self.name
+
 class Handler(object):
-    pass
+    """
+        In memory save handler
+    """
+    def __init__(self, *args, **kw):
+        pass
+
+    def save(self, debtManager):
+        pass
+
+    def purge(self):
+        pass
 
 
 
