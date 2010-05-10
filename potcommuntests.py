@@ -3,7 +3,7 @@
 from unittest import TestCase
 
 from datetime import datetime
-from potcommun import Handler, DebtManager, Item, Payment, Outlay, Person
+from sqlstorage import Handler, DebtManager, Item, Payment, Outlay, Person
 
 class Tests(TestCase):
     def test_void(self):
