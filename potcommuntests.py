@@ -29,6 +29,13 @@ class Tests(TestCase):
         outlay.addPayment(Payment(("Bob",), 2000))
         self.mgr = mgr
 
+    def test_add_person_as_string_raise(self):
+        """
+            A person should be inserted as a Person, not as a String.
+        """
+        mgr = DebtManager()
+        self.assertRaises(Exception, mgr.addPerson, "Alice")
+
 
     def test_simple_example(self):
         """
