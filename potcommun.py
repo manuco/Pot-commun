@@ -69,10 +69,6 @@ class DebtManager(object):
         self.persons = set()
         self.outlays = set()
 
-    def save(self, *args):
-        # In memory saving, nothing to do...
-        pass
-
     def addPerson(self, p):
         if type(p) in (type(""), type(u"")):
             raise ValueError("Person should not be a string.")
@@ -263,7 +259,17 @@ class Person(object):
         return "Person('%s')" % self.name
 
 class Handler(object):
-    pass
+    """
+        In memory save handler
+    """
+    def __init__(self, *args, **kw):
+        pass
+
+    def save(self, debtManager):
+        pass
+
+    def purge(self):
+        pass
 
 
 
