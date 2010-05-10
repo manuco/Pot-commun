@@ -6,8 +6,6 @@ from sqlalchemy.ext.declarative import declarative_base
 
 import potcommun
 
-
-
 Base = declarative_base()
 metadata = Base.metadata
 
@@ -49,6 +47,7 @@ class DebtManager(potcommun.DebtManager, Base):
         session.commit()
 
 
+    outlays = relationship("Outlay", collection_class=set)
 
 class Outlay(potcommun.Outlay, Base):
     __tablename__ = "Outlays"
@@ -69,38 +68,38 @@ class AbstractPayment(potcommun.AbstractPayment, Base):
     oid = Column(Integer, primary_key=True)
     classType = Column(String, nullable=False)
     amount = Column(Integer)
+    outlay = Column(Integer, ForeignKey("Outlays.oid"))
     persons = relationship(Person, secondary=persons_payments, collection_class=set)
 
     __tablename__ = "AbstractPayments"
-    __mapper_args__ = {'polymorphic_on': classType}
-
-
 
     #def __init__(self, persons, amount):
         #potcommun.AbstractPayment.__init__(self, persons, amount)
         #Base.__init__(self)
+    __mapper_args__ = {
+        'polymorphic_on': classType,
+    }
 
-
-class Payment(potcommun.Payment, Base):
+class Payment(potcommun.Payment, AbstractPayment):
 
     oid = Column(Integer, ForeignKey("AbstractPayments.oid"), primary_key=True)
-    outlay = Column(Integer, ForeignKey("Outlays.oid"))
     __tablename__ = "Payments"
-    __mapper_args__ = {'polymorphic_identity': 'payment'}
-
     #def __init__(self, persons, amount):
         #potcommun.Payment.__init__(self, persons, amount)
         #Base.__init__(self)
+    __mapper_args__ = {
+        'polymorphic_identity': 'payment',
+    }
 
-class Item(potcommun.Item, Base):
+class Item(potcommun.Item, AbstractPayment):
 
     oid = Column(Integer, ForeignKey("AbstractPayments.oid"), primary_key=True)
     label = Column(String, nullable=False)
-    outlay = Column(Integer, ForeignKey("Outlays.oid"))
     __tablename__ = "Items"
-    __mapper_args__ = {'polymorphic_identity': 'item'}
-
     #def __init__(self, persons, label, amount):
         #potcommun.Item.__init__(self, persons, label, amount)
         #Base.__init__(self)
+    __mapper_args__ = {
+        'polymorphic_identity': 'item',
+    }
 
