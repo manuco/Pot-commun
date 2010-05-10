@@ -11,18 +11,17 @@ metadata = Base.metadata
 
 dmgr_persons = Table('dmgr_persons', metadata,
     Column('mgr_oid', Integer, ForeignKey('DebtManagers.oid')),
-    Column('person_oid', Integer, ForeignKey('Persons.oid')),
+    Column('person_oid', Integer, ForeignKey('Persons.name')),
 )
 
 persons_payments = Table('persons_payments', metadata,
-    Column('person_oid', Integer, ForeignKey('Persons.oid')),
+    Column('person_oid', Integer, ForeignKey('Persons.name')),
     Column('payments_oid', Integer, ForeignKey('AbstractPayments.oid')),
 )
 
 class Person(potcommun.Person, Base):
     __tablename__ = "Persons"
-    oid = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False, unique=True)
+    name = Column(String, primary_key=True, nullable=False, unique=True)
 
 class DebtManager(potcommun.DebtManager, Base):
     __tablename__ = "DebtManagers"
