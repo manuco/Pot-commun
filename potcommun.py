@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import division
 
+__version__ = "0.0"
+
 class DebtManager(object):
     """
         A debt manager, core of this module.
