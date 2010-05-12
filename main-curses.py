@@ -8,6 +8,8 @@ import curses.wrapper
 import potcommun
 import traceback
 
+import sqlstorage
+
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
@@ -68,12 +70,12 @@ class BaseForm(object):
         self.drawBox(win, y, margin, height, mx - margin * 2, color)
         return mx - margin * 2 - 4
 
-    def drawMenu(self, win, items, selectedRow):
+    def drawMenu(self, win, items, selectedRow, color):
         maxlen = self.drawAutoResizeBox(win, 4, len(items) + 2, 4, WHITE)
         for i, item in enumerate(items):
-            label = item[0][:maxlen]
+            label = " " + item[0][:maxlen]
             label += " " * (maxlen - len(label))
-            win.addstr(5 + i, 6, label, c.A_REVERSE if i == selectedRow else 0)
+            win.addstr(5 + i, 6, label, color | c.A_REVERSE if i == selectedRow else 0)
 
 
     def drawTitle(self, win, title, color):
@@ -171,15 +173,22 @@ class DebtManagerSelection(BaseForm):
     selected = 0
 
     def __init__(self):
-        self.dms = self.getDMs()
+        self.dms = None
+        self.dmToBeDeleted = None
 
     def draw(self, win):
         BaseForm.draw(self, win)
         self.drawTitle(win, "Sélection du pot commun", WHITE)
+        if self.dms is None:
+            self.dms = self.getDMs()
         self.drawDM(win, self.dms)
 
     def drawDM(self, win, dms):
-        self.drawMenu(win, dms, self.selected)
+        if self.getSelectedDM() is self.dmToBeDeleted and self.dmToBeDeleted is not None:
+            color = RED | c.A_BOLD
+        else:
+            color = WHITE
+        self.drawMenu(win, dms, self.selected, color)
 
     def onInput(self, ch, key):
         if ch == 27:
@@ -187,23 +196,42 @@ class DebtManagerSelection(BaseForm):
         elif key in ('q', 'Q'):
             return None
         elif key in ("KEY_DOWN", "KEY_UP"):
+            self.dmToBeDeleted = None
             self.manageKeyMenu(key, len(self.dms))
         elif key == "KEY_RETURN":
-            dm = self.dms[self.selected][1]
+            dm = self.getSelectedDM()
             if dm is None:
+                self.dms = None
                 return NewDebtManagerForm()
+            elif dm == self.dmToBeDeleted:
+                self.deleteDM(dm)
+                self.dmToBeDeleted = None
+                self.dms = None
             else:
                 return DebtManagerForm(dm)
+        elif key == "KEY_DC":
+            dm = self.getSelectedDM()
+            self.dmToBeDeleted = dm
 
         return self
 
     def getDMs(self):
-        r = [
-            ("Vacances fictives", None),
+        db = getDB()
+        
+        r = [(dm.name, dm) for dm in db.getManagers()]
+        r.append(
             ("Nouveau pot commun...", None),
-        ]
+        )
 
         return r
+
+    def getSelectedDM(self):
+        return self.dms[self.selected][1]
+
+    def deleteDM(self, dm):
+        db = getDB()
+        db.deleteDebtManager(dm)
+        
 
 class NewDebtManagerForm(BaseForm):
 
@@ -218,8 +246,9 @@ class NewDebtManagerForm(BaseForm):
         if self.inputField.onInput(ch, key):
             return self
         elif key == "KEY_RETURN":
-            pass
-            ## TBC
+            dm = sqlstorage.DebtManager(self.inputField.getUserInput())
+            db = getDB()
+            db.saveDebtManager(dm)
             return 1
 
 class PotCommunCursesApplication(object):
@@ -336,6 +365,14 @@ class PotCommunCursesApplication(object):
                 return None, None
         except KeyboardInterrupt:
             return None, None
+
+_db = None
+def getDB():
+    global _db
+    if _db is None:
+        _db = sqlstorage.Handler(echo=False)
+        
+    return _db
 
 
 def main(mainWindow):
