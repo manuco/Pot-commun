@@ -12,6 +12,7 @@ class Handler(object):
     def __init__(self, url=URL, echo=True):
         self.engine = create_engine(url, echo=echo)
         self.Session = sessionmaker(bind=self.engine)
+        self.session = self.Session()
         self.initialize()
 
     def purge(self):
@@ -24,16 +25,21 @@ class Handler(object):
         metadata.create_all()
 
     def getSession(self):
-        return self.Session()
+        return self.session
 
     def saveDebtManager(self, debtManager):
         session = self.getSession()
         session.add(debtManager)
         session.commit()
+        
+    def deleteDebtManager(self, debtManager):
+        session = self.getSession()
+        session.delete(debtManager)
+        session.commit()
+        
 
     def getManagers(self):
-        session = self.getSession()
-        return session.query(DebtManager)
+        return self.session.query(DebtManager)
 
 
 
