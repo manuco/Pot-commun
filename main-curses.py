@@ -27,6 +27,10 @@ class BaseForm(object):
             an int corresponding to the forms to unstack (usualy 1).
         """
         # noop
+        if ch == 27:
+            return 1
+        elif key in ("q", "Q"):
+            return None
         return self
 
     def drawBox(self, win, y, x, height, width, color):
@@ -59,6 +63,18 @@ class BaseForm(object):
             #win.addstr(2, i, str(i)[-1], WHITE)
         #win.addstr(1,0,str(x + width - 1))
 
+    def drawAutoResizeBox(self, win, y, height, margin, color):
+        my, mx = win.getmaxyx()
+        self.drawBox(win, y, margin, height, mx - margin * 2, color)
+        return mx - margin * 2 - 4
+
+    def drawMenu(self, win, items, selectedRow):
+        maxlen = self.drawAutoResizeBox(win, 4, len(items) + 2, 4, WHITE)
+        for i, item in enumerate(items):
+            label = item[0][:maxlen]
+            label += " " * (maxlen - len(label))
+            win.addstr(5 + i, 6, label, c.A_REVERSE if i == selectedRow else 0)
+
 
     def drawTitle(self, win, title, color):
         my, mx = win.getmaxyx()
@@ -71,6 +87,65 @@ class BaseForm(object):
         self.drawBox(win, y, x, height, width, WHITE)
         x = mx // 2 - len(title) // 2
         win.addstr(1, x, title, WHITE)
+
+    def manageKeyMenu(self, key, total):
+        if key == "KEY_DOWN":
+            self.selected += 1
+            self.selected %= total
+        elif key == "KEY_UP":
+            self.selected -= 1
+            if self.selected < 0:
+                self.selected = total - 1
+
+class InputField(BaseForm):
+    def __init__(self, prompt, y):
+        self.prompt = prompt
+        self.y = y
+        self.pos = 0
+        self.userInput = u""
+        self.unicodeBuffer = ""
+
+    def draw(self, win):
+        win.addstr(self.y, 0, self.prompt + self.userInput.encode("utf-8"), WHITE)
+        win.move(self.y, len(self.prompt) + self.pos)
+
+    def getUserInput(self):
+        return self.userInput
+
+    def onInput(self, ch, key):
+        if ch >= 32 and ch < 256:
+            self.unicodeBuffer += chr(ch)
+            try:
+                uc = self.unicodeBuffer.decode("utf-8")
+                self.userInput = self.userInput[:self.pos] + uc + self.userInput[self.pos:]
+                self.unicodeBuffer = ""
+                self.pos += 1
+            except UnicodeDecodeError:
+                pass
+            return True
+        elif key == "KEY_LEFT":
+            self.pos -= 1 if self.pos > 0 else 0
+            return True
+        elif key == "KEY_RIGHT":
+            self.pos += 1 if self.pos < len(self.userInput) else 0
+            return True
+        elif key == "KEY_BACKSPACE":
+            if self.pos > 0:
+                self.userInput = self.userInput[:self.pos - 1] + self.userInput[self.pos:]
+                self.pos -= 1
+            return True
+        elif key == "KEY_DC":
+            if self.pos < len(self.userInput):
+                self.userInput = self.userInput[:self.pos] + self.userInput[self.pos + 1:]
+            return True
+        elif key == "KEY_HOME":
+            self.pos = 0
+            return True
+        elif key == "KEY_END":
+            self.pos = len(self.userInput)
+            return True
+
+        return False
 
 class WelcomeForm(BaseForm):
     def draw(self, win):
@@ -90,20 +165,62 @@ class WelcomeForm(BaseForm):
             return self
 
 
+
 class DebtManagerSelection(BaseForm):
+
+    selected = 0
+
+    def __init__(self):
+        self.dms = self.getDMs()
+
     def draw(self, win):
         BaseForm.draw(self, win)
         self.drawTitle(win, "Sélection du pot commun", WHITE)
+        self.drawDM(win, self.dms)
+
+    def drawDM(self, win, dms):
+        self.drawMenu(win, dms, self.selected)
 
     def onInput(self, ch, key):
-        if ch == 27 or key in ('q', 'Q'):
+        if ch == 27:
             return 1
-        elif ch == 13:
-            return self
-        else:
-            return self
+        elif key in ('q', 'Q'):
+            return None
+        elif key in ("KEY_DOWN", "KEY_UP"):
+            self.manageKeyMenu(key, len(self.dms))
+        elif key == "KEY_RETURN":
+            dm = self.dms[self.selected][1]
+            if dm is None:
+                return NewDebtManagerForm()
+            else:
+                return DebtManagerForm(dm)
 
+        return self
 
+    def getDMs(self):
+        r = [
+            ("Vacances fictives", None),
+            ("Nouveau pot commun...", None),
+        ]
+
+        return r
+
+class NewDebtManagerForm(BaseForm):
+
+    def __init__(self):
+        self.inputField = InputField("Nom : ", 5)
+
+    def draw(self, win):
+        self.drawTitle(win, "Nouveau pot commun", WHITE)
+        self.inputField.draw(win)
+
+    def onInput(self, ch, key):
+        if self.inputField.onInput(ch, key):
+            return self
+        elif key == "KEY_RETURN":
+            pass
+            ## TBC
+            return 1
 
 class PotCommunCursesApplication(object):
 
@@ -145,8 +262,6 @@ class PotCommunCursesApplication(object):
 
         if key is None:
             r = "None - XXX - XXX"
-        elif ch == 13:
-            r = "RETURN - " + str(ch) + " - '" + curses.unctrl(ch) + "'"
         else:
             r = key + " - " + str(ch) + " - '" + curses.unctrl(ch) + "'"
         fd = open("/tmp/log", "a")
@@ -211,6 +326,10 @@ class PotCommunCursesApplication(object):
 
                 fd.write("\n")
                 fd.close()
+                if ch == 13:
+                    key = "KEY_RETURN"
+                elif ch == 27:
+                    key = "KEY_ESCAPE"
 
                 return ch, key
             except KeyboardInterrupt:
