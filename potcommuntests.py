@@ -3,14 +3,13 @@
 from unittest import TestCase
 
 from datetime import datetime
-from potcommun import Handler, DebtManager, Item, Payment, Outlay, Person
+from sqlstorage import Handler, DebtManager, Item, Payment, Outlay, Person
 
 class Tests(TestCase):
     def test_void(self):
         self.assertEqual(1, 1)
 
     def setUp(self):
-        self.saveHandler = Handler()
 
         mgr = DebtManager()
         self.alice = alice = mgr.addPerson(Person("Alice"))
@@ -231,6 +230,15 @@ class Tests(TestCase):
         )
         self.assertEqual(result, expected)
 
-
     def test_save(self):
-        pass
+
+        saveHandler = Handler(echo=False)
+        saveHandler.purge()
+        saveHandler.saveDebtManager(self.mgr)
+        del saveHandler, self.mgr
+
+        db = Handler(echo=False)
+        dm = db.getManagers()[0]
+        r = dm.computeBalances()
+        self.assertEqual(r, {self.alice: -2500, self.bob: 2500})
+

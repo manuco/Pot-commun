@@ -67,7 +67,8 @@ class DebtManager(object):
 
     """
 
-    def __init__(self):
+    def __init__(self, name="unnamed"):
+        self.name = name
         self.persons = set()
         self.outlays = set()
 
