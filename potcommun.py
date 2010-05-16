@@ -258,6 +258,10 @@ class Person(object):
     def __repr__(self):
         return "Person('%s')" % self.name
 
+    def __str__(self):
+        return "%s  " % self.name
+
+
 class Handler(object):
     """
         In memory save handler
