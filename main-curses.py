@@ -35,6 +35,9 @@ class BaseForm(object):
             return None
         return self
 
+    def onFocus(self):
+        pass
+
     def drawBox(self, win, y, x, height, width, color):
         """
             Draw a box.
@@ -90,14 +93,56 @@ class BaseForm(object):
         x = mx // 2 - len(title) // 2
         win.addstr(1, x, title, WHITE)
 
-    def manageKeyMenu(self, key, total):
+
+class BaseMenu(BaseForm):
+    def __init__(self, items, selected=None):
+        """
+        items should be [(label, item), ..]
+        """
+        self.items = items
+        self.total = len(items)
+        if selected is not None:
+            if type(selected) == type(1):
+                self.selected = selected
+            else:
+                self.selected = [i for a, i in items].index(selected)
+        else:
+            self.selected = 0
+        self.itemToBeDeleted = None
+        
+    def onInput(self, ch, key):
         if key == "KEY_DOWN":
+            self.itemToBeDeleted = None
             self.selected += 1
-            self.selected %= total
+            self.selected %= self.total
         elif key == "KEY_UP":
+            self.itemToBeDeleted = None
             self.selected -= 1
             if self.selected < 0:
-                self.selected = total - 1
+                self.selected = self.total - 1
+        elif key == "KEY_RETURN":
+            item = self.getSelectedItem()
+            
+            if item is not None and item == self.itemToBeDeleted:
+                return "DELETE"
+            else:
+                return "ACCEPT"
+        elif key == "KEY_DC":
+            self.itemToBeDeleted = self.getSelectedItem()
+
+    def getSelectedItem(self):
+        return self.items[self.selected][1]
+
+    def getSelectedIndex(self):
+        return self.selected
+
+    def draw(self, win):
+        if self.getSelectedItem() is self.itemToBeDeleted and self.itemToBeDeleted is not None:
+            color = RED | c.A_BOLD
+        else:
+            color = WHITE
+        self.drawMenu(win, self.items, self.selected, color)
+        
 
 class InputField(BaseForm):
     def __init__(self, prompt, y):
@@ -167,52 +212,62 @@ class WelcomeForm(BaseForm):
             return self
 
 
+class DebtManagerForm(BaseForm):
+    def __init__(self, dm):
+        self.dm = dm
+        self.menu = BaseMenu(self.oulays)
+        
+        
+    def draw(self, win):
+        BaseForm.draw(self, win)
+        self.drawTitle(win, u"Pot commun : %s" % self.dm.label, WHITE)
+        curLine = 4
+        self.drawOutlays(win, self.oulays)
+
+    def drawOutlays(self, win, outlays):
+        if self.getSelectedDM() is self.dmToBeDeleted and self.dmToBeDeleted is not None:
+            color = RED | c.A_BOLD
+        else:
+            color = WHITE
+        self.drawMenu(win, dms, self.selected, color)
+        
+
 
 class DebtManagerSelection(BaseForm):
-
-    selected = 0
 
     def __init__(self):
         self.dms = None
         self.dmToBeDeleted = None
+        self.menu = None
+
+    def onFocus(self):
+        self.menu = BaseMenu(self.getDMs(), self.menu.getSelectedIndex() if self.menu is not None else 0)
 
     def draw(self, win):
         BaseForm.draw(self, win)
         self.drawTitle(win, "Sélection du pot commun", WHITE)
         if self.dms is None:
             self.dms = self.getDMs()
-        self.drawDM(win, self.dms)
+        self.menu.draw(win)
 
-    def drawDM(self, win, dms):
-        if self.getSelectedDM() is self.dmToBeDeleted and self.dmToBeDeleted is not None:
-            color = RED | c.A_BOLD
-        else:
-            color = WHITE
-        self.drawMenu(win, dms, self.selected, color)
 
     def onInput(self, ch, key):
         if ch == 27:
             return 1
         elif key in ('q', 'Q'):
             return None
-        elif key in ("KEY_DOWN", "KEY_UP"):
-            self.dmToBeDeleted = None
-            self.manageKeyMenu(key, len(self.dms))
-        elif key == "KEY_RETURN":
-            dm = self.getSelectedDM()
-            if dm is None:
-                self.dms = None
-                return NewDebtManagerForm()
-            elif dm == self.dmToBeDeleted:
-                self.deleteDM(dm)
-                self.dmToBeDeleted = None
-                self.dms = None
-            else:
-                return DebtManagerForm(dm)
-        elif key == "KEY_DC":
-            dm = self.getSelectedDM()
-            self.dmToBeDeleted = dm
-
+        else:
+            action = self.menu.onInput(ch, key)
+            if action == "DELETE":
+                self.deleteDM(self.menu.getSelectedItem())
+                self.menu = BaseMenu(self.getDMs(), self.menu.getSelectedIndex())
+            elif action == "ACCEPT":
+                dm = self.menu.getSelectedItem()
+                if dm is None:
+                    return NewDebtManagerForm()
+                else:
+                    return DebtManagerForm(dm)
+ 
         return self
 
     def getDMs(self):
@@ -225,8 +280,6 @@ class DebtManagerSelection(BaseForm):
 
         return r
 
-    def getSelectedDM(self):
-        return self.dms[self.selected][1]
 
     def deleteDM(self, dm):
         db = getDB()
@@ -326,11 +379,13 @@ class PotCommunCursesApplication(object):
                     try:
                         for i in range(newForm):
                             self.form = self.formStack.pop()
+                            self.form.onFocus()
                     except IndexError:
                         return 0
                 else:
                     self.formStack.append(self.form)
                     self.form = newForm
+                    self.form.onFocus()
 
     def prompt(self):
         ## See http://bugs.python.org/issue1687125
