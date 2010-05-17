@@ -234,3 +234,19 @@ class Tests(TestCase):
 
     def test_save(self):
         pass
+        
+    def test_rounding_bug_when_item_payment_balance_is_not_null(self):
+        mgr = DebtManager()
+        alice = mgr.addPerson(Person("Alice"))
+        bob = mgr.addPerson(Person("Bob"))
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
+        mgr.addOutlay(outlay)
+        outlay.addPayment(Payment((bob,), 3))
+        outlay.addPersons((alice,))
+        result = mgr.computeDebts()
+        expected = ((alice, 2, bob),)
+        self.assertEqual(result, expected)
+
+        
+        
+        
