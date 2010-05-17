@@ -244,7 +244,7 @@ class Tests(TestCase):
         outlay.addPayment(Payment((bob,), 3))
         outlay.addPersons((alice,))
         result = mgr.computeDebts()
-        expected = ((alice, 2, bob),)
+        expected = ((alice, 1, bob),)
         self.assertEqual(result, expected)
 
         

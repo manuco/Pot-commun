@@ -99,25 +99,37 @@ class DebtManager(object):
         """
         itemsTotal = sum(items.values())
         paymentsTotal = sum(payments.values())
+        roundingError = 0
 
         if itemsTotal > paymentsTotal:
             missingAmount = itemsTotal - paymentsTotal
-            missingPerPerson = missingAmount // len(persons)
             elemToAdjust = payments
         elif itemsTotal < paymentsTotal:
             missingAmount = paymentsTotal - itemsTotal
-            missingPerPerson = missingAmount // len(persons)
             elemToAdjust = items
         else:
             elemToAdjust = None
 
+        if elemToAdjust is not None:        
+            missingPerPerson = missingAmount // len(persons)
+            divisor = len(persons)
+            roundingError = missingAmount - missingAmount // divisor * divisor
+
         for person in persons:
             for elem in [items, payments]:
-                value = missingPerPerson if elem is elemToAdjust else 0
-                if person in elem.keys():
-                    elem[person] += value
-                else:
-                    elem[person] = value
+                if person not in elem.keys():
+                    elem[person] = 0
+        
+        if elemToAdjust is None:
+            return items, payments
+        
+        for person in persons:
+            elemToAdjust[person] += missingPerPerson
+
+        while roundingError > 0:
+            for person in persons:
+                elemToAdjust[person] += 1 if roundingError > 0 else 0 
+                roundingError -= 1
 
         return items, payments
 
