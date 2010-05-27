@@ -253,5 +253,10 @@ class Tests(TestCase):
         expected = ()
         self.assertEqual(result, expected)
 
+    def test_refunds(self):
+        self.mgr.addRefund(Refund(self.bob, 500, self.alice))
+        result = self.mgr.computeDebts()
+        expected = ((self.bob, 2000, self.alice),)
+        self.assertEqual(result, expected)
         
         
