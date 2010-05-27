@@ -4,7 +4,7 @@ from __future__ import division
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from sqlmodel import metadata, DebtManager, Person, Outlay, Item, Payment
+from sqlmodel import metadata, DebtManager, Person, Outlay, Item, Payment, Refund
 
 URL = "sqlite:///potcommun.db"
 

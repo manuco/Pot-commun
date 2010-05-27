@@ -3,7 +3,7 @@
 from unittest import TestCase
 
 from datetime import datetime
-from sqlstorage import Handler, DebtManager, Item, Payment, Outlay, Person
+from sqlstorage import Handler, DebtManager, Item, Payment, Outlay, Person, Refund
 
 class Tests(TestCase):
     def test_void(self):
@@ -230,8 +230,31 @@ class Tests(TestCase):
         )
         self.assertEqual(result, expected)
 
-    def test_save(self):
+    def test_rounding_bug_when_item_payment_balance_is_not_null(self):
+        mgr = DebtManager()
+        alice = mgr.addPerson(Person("Alice"))
+        bob = mgr.addPerson(Person("Bob"))
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
+        mgr.addOutlay(outlay)
+        outlay.addPayment(Payment((bob,), 3))
+        outlay.addPersons((alice,))
+        result = mgr.computeDebts()
+        expected = ((alice, 1, bob),)
+        self.assertEqual(result, expected)
 
+    def test_partial_refunds(self):
+        self.mgr.addRefund(Refund(self.bob, 2500, self.alice))
+        result = self.mgr.computeDebts()
+        expected = ()
+        self.assertEqual(result, expected)
+
+    def test_refunds(self):
+        self.mgr.addRefund(Refund(self.bob, 500, self.alice))
+        result = self.mgr.computeDebts()
+        expected = ((self.bob, 2000, self.alice),)
+        self.assertEqual(result, expected)
+
+    def test_save(self):
         saveHandler = Handler(echo=False)
         saveHandler.purge()
         saveHandler.saveDebtManager(self.mgr)

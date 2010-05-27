@@ -34,6 +34,7 @@ class DebtManager(potcommun.DebtManager, Base):
     name = Column(String)
     persons = relationship(Person, secondary=dmgr_persons, collection_class=set)
     outlays = relationship("Outlay", collection_class=set)
+    refunds = relationship("Refund", collection_class=set)
 
 class Outlay(potcommun.Outlay, Base):
     __tablename__ = "Outlays"
@@ -44,6 +45,16 @@ class Outlay(potcommun.Outlay, Base):
     items = relationship("Item", collection_class=set)
     payments = relationship("Payment", collection_class=set)
     persons = relationship(Person, secondary=persons_outlays, collection_class=set)
+
+class Refund(potcommun.Refund, Base):
+    __tablename__ = "Refunds"
+    oid = Column(Integer, primary_key=True)
+    mgr = Column(Integer, ForeignKey("DebtManagers.oid")) ## Reverse
+    debitPerson = Column(Integer, ForeignKey("Persons.name"))
+    creditPerson = Column(Integer, ForeignKey("Persons.name"))
+    amount = Column(Integer)
+
+
 
 class AbstractPayment(potcommun.AbstractPayment, Base):
 
