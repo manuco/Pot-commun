@@ -146,11 +146,50 @@ class BaseMenu(BaseForm):
             label += " " * (maxlen - len(label))
             self.win.addstr(1 + i, 6, label, color | c.A_REVERSE if i == selectedRow else 0)
 
+class StackedFields(BaseForm):
+    def __init__(self):
+        self.fields = []
+        self.focusedFieldIndex = 0
+        
+    def add(self, field):
+        self.fields.append(field)
+        
+    def layout(self, win):
+        self.win = win
+        self.subwins = []
+        y = 0
+        for field in self.fields:
+            params = field.getSubwinParams(y, win)
+            subwin = self.win.derwin(*params)
+            y += params[0] ## nb lines
+            field.layout(subwin)
+            self.subwins.append(subwin)
+            
+    def draw(self):
+        for i, field in enumerate(self.fields):
+            if i != self.focusedFieldIndex:
+                field.draw()
+        ## the focused field is drawn last
+        self.fields[self.focusedFieldIndex].draw()
+        self.subwins[self.focusedFieldIndex].addstr(0, 0, ">")
+
+    def onInput(self, ch, key):
+        if key == "KEY_TAB":
+            self.focusedFieldIndex += 1
+            self.focusedFieldIndex %= len(self.fields)
+        elif key == "KEY_BTAB":
+            self.focusedFieldIndex -= 1
+            if self.focusedFieldIndex < 0:
+                self.focusedFieldIndex = len(self.fields) - 1
+        else:
+            return self.fields[self.focusedFieldIndex].onInput(ch, key)
+        return True
+
 class InputField(BaseForm):
-    def __init__(self, prompt):
+    def __init__(self, prompt, defaultValue=u""):
         self.prompt = prompt
-        self.pos = 0
-        self.userInput = u""
+        self.pos = len(defaultValue)
+        self.userInput = defaultValue
         self.unicodeBuffer = ""
 
     def draw(self):
@@ -159,12 +198,9 @@ class InputField(BaseForm):
         self.win.cursyncup()
 
     @staticmethod
-    def getSubwin(y, win):
+    def getSubwinParams(y, win):
         xmax = win.getmaxyx()[1]
-        fd = open("/tmp/log", "a")
-        fd.write("-> %d %d\n" % (y, xmax))
-        fd.close()
-        return win.derwin(1, xmax - 4, y, 2)
+        return (1, xmax - 4, y, 2)
 
     def getUserInput(self):
         return self.userInput
@@ -253,7 +289,7 @@ class DebtManagerForm(BaseForm):
             outlay = self.menu.getSelectedItem()
             if outlay is None:
                 outlay = sqlstorage.Outlay(datetime.datetime.now(), "")
-            return OutlayForm(dm)
+            return OutlayEditForm(outlay)
         else:
             return BaseForm.onInput(self, ch, key)
 
@@ -323,7 +359,7 @@ class NewDebtManagerForm(BaseForm):
 
     def layout(self, win):
         self.win = win
-        self.inputField.layout(InputField.getSubwin(5, win))
+        self.inputField.layout(win.derwin(*InputField.getSubwinParams(5, win)))
 
     def draw(self):
         self.drawTitle("Nouveau pot commun", WHITE)
@@ -340,6 +376,36 @@ class NewDebtManagerForm(BaseForm):
         elif key == "KEY_ESCAPE":
             return 1
     	return self
+
+class OutlayEditForm(BaseForm):
+    def __init__(self, outlay):
+        self.outlay = outlay
+        self.stack = StackedFields()
+        self.nameField = InputField("Nom : ", outlay.label)
+        self.dateField = InputField("Date : ", unicode(outlay.date))
+        self.errorMsg = BaseForm()
+        self.errorMsg.getSubwinParams = lambda y, win: (1, 50, y, 2)
+        self.stack.add(self.nameField)
+        self.stack.add(self.dateField)
+        self.stack.add(self.errorMsg)
+        
+        
+    def layout(self, win):
+        self.win = win
+        xmax = win.getmaxyx()[1]
+        self.workspace = self.win.derwin(3, xmax, 5, 0)
+        self.stack.layout(self.workspace)
+
+    def draw(self):
+        self.drawTitle("Édition d'une dépense", WHITE)
+        self.stack.draw()
+        
+    def onInput(self, ch, key):
+        if self.stack.onInput(ch, key):
+            return self
+        else:
+            return 1
+
 
 class PotCommunCursesApplication(object):
 
