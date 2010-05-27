@@ -3,7 +3,7 @@
 from unittest import TestCase
 
 from datetime import datetime
-from potcommun import Handler, DebtManager, Item, Payment, Outlay, Person
+from potcommun import Handler, DebtManager, Item, Payment, Outlay, Person, Refund
 
 class Tests(TestCase):
     def test_void(self):
@@ -248,8 +248,8 @@ class Tests(TestCase):
         self.assertEqual(result, expected)
 
     def test_partial_refunds(self):
-        self.mgr.addRefund(Refund(bob, 2500, alice))
-        result = mgr.computeDebts()
+        self.mgr.addRefund(Refund(self.bob, 2500, self.alice))
+        result = self.mgr.computeDebts()
         expected = ()
         self.assertEqual(result, expected)
 

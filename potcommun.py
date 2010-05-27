@@ -68,6 +68,7 @@ class DebtManager(object):
     def __init__(self):
         self.persons = set()
         self.outlays = set()
+        self.refunds = set()
 
     def addPerson(self, p):
         if type(p) in (type(""), type(u"")):
@@ -86,11 +87,15 @@ class DebtManager(object):
 
     def addOutlay(self, outlay):
         """
-            Return a new outlay.
+            Return the outlay.
         """
         outlay.mgr = self
         self.outlays.add(outlay)
         return outlay
+
+    def addRefund(self, refund):
+        self.refunds.add(refund)
+        return refund
 
     @staticmethod
     def checkAndAdjustTotals(persons, items, payments):
@@ -151,6 +156,11 @@ class DebtManager(object):
         result = {}
         for name in totals[0].keys():
             result[name] = totals[0][name] - totals[1][name]
+            
+        for refund in self.refunds:
+            result[refund.debitPerson] -= refund.amount
+            result[refund.creditPerson] += refund.amount
+            
         return result
 
     def filterNull(self, balances):
@@ -287,7 +297,14 @@ class Handler(object):
     def purge(self):
         pass
 
-
+class Refund(object):
+    """
+        A direct refund, maybe partial.
+    """
+    def __init__(self, debitPerson, amount, creditPerson):
+        self.debitPerson = debitPerson
+        self.amount = amount
+        self.creditPerson = creditPerson        
 
 
 
