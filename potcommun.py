@@ -69,6 +69,7 @@ class DebtManager(object):
         self.name = name
         self.persons = set()
         self.outlays = set()
+        self.refunds = set()
 
     def addPerson(self, p):
         if type(p) in (type(""), type(u"")):
@@ -87,11 +88,15 @@ class DebtManager(object):
 
     def addOutlay(self, outlay):
         """
-            Return a new outlay.
+            Return the outlay.
         """
         outlay.mgr = self
         self.outlays.add(outlay)
         return outlay
+
+    def addRefund(self, refund):
+        self.refunds.add(refund)
+        return refund
 
     @staticmethod
     def checkAndAdjustTotals(persons, items, payments):
@@ -100,25 +105,37 @@ class DebtManager(object):
         """
         itemsTotal = sum(items.values())
         paymentsTotal = sum(payments.values())
+        roundingError = 0
 
         if itemsTotal > paymentsTotal:
             missingAmount = itemsTotal - paymentsTotal
-            missingPerPerson = missingAmount // len(persons)
             elemToAdjust = payments
         elif itemsTotal < paymentsTotal:
             missingAmount = paymentsTotal - itemsTotal
-            missingPerPerson = missingAmount // len(persons)
             elemToAdjust = items
         else:
             elemToAdjust = None
 
+        if elemToAdjust is not None:        
+            missingPerPerson = missingAmount // len(persons)
+            divisor = len(persons)
+            roundingError = missingAmount - missingAmount // divisor * divisor
+
         for person in persons:
             for elem in [items, payments]:
-                value = missingPerPerson if elem is elemToAdjust else 0
-                if person in elem.keys():
-                    elem[person] += value
-                else:
-                    elem[person] = value
+                if person not in elem.keys():
+                    elem[person] = 0
+        
+        if elemToAdjust is None:
+            return items, payments
+        
+        for person in persons:
+            elemToAdjust[person] += missingPerPerson
+
+        while roundingError > 0:
+            for person in persons:
+                elemToAdjust[person] += 1 if roundingError > 0 else 0 
+                roundingError -= 1
 
         return items, payments
 
@@ -140,6 +157,11 @@ class DebtManager(object):
         result = {}
         for name in totals[0].keys():
             result[name] = totals[0][name] - totals[1][name]
+            
+        for refund in self.refunds:
+            result[refund.debitPerson] -= refund.amount
+            result[refund.creditPerson] += refund.amount
+            
         return result
 
     def filterNull(self, balances):
@@ -259,6 +281,10 @@ class Person(object):
     def __repr__(self):
         return "Person('%s')" % self.name
 
+    def __str__(self):
+        return "%s  " % self.name
+
+
 class Handler(object):
     """
         In memory save handler
@@ -272,7 +298,14 @@ class Handler(object):
     def purge(self):
         pass
 
-
+class Refund(object):
+    """
+        A direct refund, maybe partial.
+    """
+    def __init__(self, debitPerson, amount, creditPerson):
+        self.debitPerson = debitPerson
+        self.amount = amount
+        self.creditPerson = creditPerson        
 
 
 
