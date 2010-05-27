@@ -7,6 +7,7 @@ import curses as c
 import curses.wrapper
 import potcommun
 import traceback
+import datetime
 
 import sqlstorage
 
@@ -16,11 +17,14 @@ locale.setlocale(locale.LC_ALL, '')
 ## Tip : export ESCDELAY var to reduce time to interpret escape key (10 is fine)
 
 class BaseForm(object):
-    def draw(self, win):
+    def draw(self):
         """
             Draw the screen of the form
         """
-        win.erase()
+        self.win.erase()
+
+    def layout(self, win):
+        self.win = win
 
     def onInput(self, ch, key):
         """
@@ -38,7 +42,7 @@ class BaseForm(object):
     def onFocus(self):
         pass
 
-    def drawBox(self, win, y, x, height, width, color):
+    def drawBox(self, y, x, height, width, color):
         """
             Draw a box.
 
@@ -47,51 +51,43 @@ class BaseForm(object):
         ## corners
         #win.addstr(0,0,str(width))
 
-        my, mx = win.getmaxyx()
+        my, mx = self.win.getmaxyx()
         if mx < x + width or my < y + height or x < 0 or y < 0:
             return
 
-        win.addch(y, x, c.ACS_ULCORNER , WHITE)
-        win.addch(y, x + width - 1, c.ACS_URCORNER , WHITE)
-        win.addch(y + height - 1, x + width - 1, c.ACS_LRCORNER , WHITE)
-        win.addch(y + height - 1, x, c.ACS_LLCORNER , WHITE)
+        self.win.addch(y, x, c.ACS_ULCORNER , WHITE)
+        self.win.addch(y, x + width - 1, c.ACS_URCORNER , WHITE)
+        self.win.addch(y + height - 1, x + width - 1, c.ACS_LRCORNER , WHITE)
+        self.win.addch(y + height - 1, x, c.ACS_LLCORNER , WHITE)
         for n in range(width - 2):
-            win.addch(y, x + n + 1, c.ACS_HLINE, WHITE)
+            self.win.addch(y, x + n + 1, c.ACS_HLINE, WHITE)
             #win.addstr(y, x + n + 1, str(n)[-1], WHITE)
-            win.addch(y + height - 1, x + n + 1, c.ACS_HLINE, WHITE)
+            self.win.addch(y + height - 1, x + n + 1, c.ACS_HLINE, WHITE)
 
         for n in range(height - 2):
-            win.addch(y + n + 1, x, c.ACS_VLINE, WHITE)
-            win.addch(y + n + 1, x + width - 1, c.ACS_VLINE, WHITE)
+            self.win.addch(y + n + 1, x, c.ACS_VLINE, WHITE)
+            self.win.addch(y + n + 1, x + width - 1, c.ACS_VLINE, WHITE)
 
         #for i in range(60):
             #win.addstr(2, i, str(i)[-1], WHITE)
         #win.addstr(1,0,str(x + width - 1))
 
-    def drawAutoResizeBox(self, win, y, height, margin, color):
-        my, mx = win.getmaxyx()
-        self.drawBox(win, y, margin, height, mx - margin * 2, color)
+    def drawAutoResizeBox(self, y, height, margin, color):
+        my, mx = self.win.getmaxyx()
+        self.drawBox(y, margin, height, mx - margin * 2, color)
         return mx - margin * 2 - 4
 
-    def drawMenu(self, win, items, selectedRow, color):
-        maxlen = self.drawAutoResizeBox(win, 4, len(items) + 2, 4, WHITE)
-        for i, item in enumerate(items):
-            label = " " + item[0][:maxlen]
-            label += " " * (maxlen - len(label))
-            win.addstr(5 + i, 6, label, color | c.A_REVERSE if i == selectedRow else 0)
-
-
-    def drawTitle(self, win, title, color):
-        my, mx = win.getmaxyx()
+    def drawTitle(self, title, color):
+        my, mx = self.win.getmaxyx()
         minWidth = len(title) + 3
         maxX = mx // 2 - minWidth // 2 - 1
         x = mx // 4 if mx // 4 < maxX else maxX
         width = mx // 2 if mx // 2 > minWidth else minWidth
         y = 0
         height = 3
-        self.drawBox(win, y, x, height, width, WHITE)
+        self.drawBox(y, x, height, width, WHITE)
         x = mx // 2 - len(title) // 2
-        win.addstr(1, x, title, WHITE)
+        self.win.addstr(1, x, title, WHITE)
 
 
 class BaseMenu(BaseForm):
@@ -136,25 +132,39 @@ class BaseMenu(BaseForm):
     def getSelectedIndex(self):
         return self.selected
 
-    def draw(self, win):
+    def draw(self):
         if self.getSelectedItem() is self.itemToBeDeleted and self.itemToBeDeleted is not None:
             color = RED | c.A_BOLD
         else:
             color = WHITE
-        self.drawMenu(win, self.items, self.selected, color)
+        self.drawMenu(self.items, self.selected, color)
         
+    def drawMenu(self, items, selectedRow, color):
+        maxlen = self.drawAutoResizeBox(0, len(items) + 2, 4, WHITE)
+        for i, item in enumerate(items):
+            label = " " + item[0][:maxlen]
+            label += " " * (maxlen - len(label))
+            self.win.addstr(1 + i, 6, label, color | c.A_REVERSE if i == selectedRow else 0)
 
 class InputField(BaseForm):
-    def __init__(self, prompt, y):
+    def __init__(self, prompt):
         self.prompt = prompt
-        self.y = y
         self.pos = 0
         self.userInput = u""
         self.unicodeBuffer = ""
 
-    def draw(self, win):
-        win.addstr(self.y, 0, self.prompt + self.userInput.encode("utf-8"), WHITE)
-        win.move(self.y, len(self.prompt) + self.pos)
+    def draw(self):
+        self.win.addstr(0, 0, self.prompt + self.userInput, WHITE)
+        self.win.move(0, len(self.prompt) + self.pos)
+        self.win.cursyncup()
+
+    @staticmethod
+    def getSubwin(y, win):
+        xmax = win.getmaxyx()[1]
+        fd = open("/tmp/log", "a")
+        fd.write("-> %d %d\n" % (y, xmax))
+        fd.close()
+        return win.derwin(1, xmax - 4, y, 2)
 
     def getUserInput(self):
         return self.userInput
@@ -195,13 +205,13 @@ class InputField(BaseForm):
         return False
 
 class WelcomeForm(BaseForm):
-    def draw(self, win):
-        BaseForm.draw(self, win)
+    def draw(self):
+        BaseForm.draw(self)
         title = "Bienvenue ! Appuyez sur Entrée pour commencer."
-        my, mx = win.getmaxyx()
+        my, mx = self.win.getmaxyx()
         x = mx // 2 - len(title) // 2
         y = my // 2
-        win.addstr(y, x, title, YELLOW | c.A_BOLD)
+        self.win.addstr(y, x, title, YELLOW | c.A_BOLD)
 
     def onInput(self, ch, key):
         if ch == 27 or key in ('q', 'Q'):
@@ -215,22 +225,37 @@ class WelcomeForm(BaseForm):
 class DebtManagerForm(BaseForm):
     def __init__(self, dm):
         self.dm = dm
-        self.menu = BaseMenu(self.oulays)
+        self.outlays = self.getOutlays()
+        self.menu = BaseMenu(self.outlays)
         
+    def getOutlays(self):
+        r = [(o.label.encode("utf-8"), o) for o in self.dm.outlays]
+        r.append(("Nouvelle dépense...", None))
+        return r
         
-    def draw(self, win):
-        BaseForm.draw(self, win)
-        self.drawTitle(win, u"Pot commun : %s" % self.dm.label, WHITE)
-        curLine = 4
-        self.drawOutlays(win, self.oulays)
-
-    def drawOutlays(self, win, outlays):
-        if self.getSelectedDM() is self.dmToBeDeleted and self.dmToBeDeleted is not None:
-            color = RED | c.A_BOLD
+    def layout(self, win):
+        BaseForm.layout(self, win)
+        self.menu.layout(self.win.subwin(6, 0))
+       
+    def draw(self):
+        BaseForm.draw(self)
+        self.drawTitle("Pot commun : %s" % self.dm.name.encode("utf-8"), WHITE)
+        self.menu.draw()
+        
+    def onInput(self, ch, key):
+        action = self.menu.onInput(ch, key)
+        if action == "DELETE":
+            ## XXX
+            self.deleteDM(self.menu.getSelectedItem())
+            self.menu = BaseMenu(self.getDMs(), self.menu.getSelectedIndex())
+            self.layout(self.win)
+        elif action == "ACCEPT":
+            outlay = self.menu.getSelectedItem()
+            if outlay is None:
+                outlay = sqlstorage.Outlay(datetime.datetime.now(), "")
+            return OutlayForm(dm)
         else:
-            color = WHITE
-        self.drawMenu(win, dms, self.selected, color)
-        
+            return BaseForm.onInput(self, ch, key)
 
 
 class DebtManagerSelection(BaseForm):
@@ -243,12 +268,16 @@ class DebtManagerSelection(BaseForm):
     def onFocus(self):
         self.menu = BaseMenu(self.getDMs(), self.menu.getSelectedIndex() if self.menu is not None else 0)
 
-    def draw(self, win):
-        BaseForm.draw(self, win)
-        self.drawTitle(win, "Sélection du pot commun", WHITE)
+    def layout(self, win):
+        BaseForm.layout(self, win)
+        self.menu.layout(self.win.subwin(6, 0))
+
+    def draw(self):
+        BaseForm.draw(self)
+        self.drawTitle("Sélection du pot commun", WHITE)
         if self.dms is None:
             self.dms = self.getDMs()
-        self.menu.draw(win)
+        self.menu.draw()
 
 
     def onInput(self, ch, key):
@@ -261,6 +290,7 @@ class DebtManagerSelection(BaseForm):
             if action == "DELETE":
                 self.deleteDM(self.menu.getSelectedItem())
                 self.menu = BaseMenu(self.getDMs(), self.menu.getSelectedIndex())
+                self.layout(self.win)
             elif action == "ACCEPT":
                 dm = self.menu.getSelectedItem()
                 if dm is None:
@@ -273,7 +303,7 @@ class DebtManagerSelection(BaseForm):
     def getDMs(self):
         db = getDB()
         
-        r = [(dm.name, dm) for dm in db.getManagers()]
+        r = [(dm.name.encode("utf-8"), dm) for dm in db.getManagers()]
         r.append(
             ("Nouveau pot commun...", None),
         )
@@ -289,11 +319,15 @@ class DebtManagerSelection(BaseForm):
 class NewDebtManagerForm(BaseForm):
 
     def __init__(self):
-        self.inputField = InputField("Nom : ", 5)
+        self.inputField = InputField("Nom : ")
 
-    def draw(self, win):
-        self.drawTitle(win, "Nouveau pot commun", WHITE)
-        self.inputField.draw(win)
+    def layout(self, win):
+        self.win = win
+        self.inputField.layout(InputField.getSubwin(5, win))
+
+    def draw(self):
+        self.drawTitle("Nouveau pot commun", WHITE)
+        self.inputField.draw()
 
     def onInput(self, ch, key):
         if self.inputField.onInput(ch, key):
@@ -303,6 +337,9 @@ class NewDebtManagerForm(BaseForm):
             db = getDB()
             db.saveDebtManager(dm)
             return 1
+        elif key == "KEY_ESCAPE":
+            return 1
+    	return self
 
 class PotCommunCursesApplication(object):
 
@@ -311,6 +348,7 @@ class PotCommunCursesApplication(object):
         self.formStack = []
         self.mainWindow = mainWindow
         self.workspace = self.createWorkspace()
+        self.form.layout(self.workspace)
         self.mainWindow.notimeout(True)
         self.workspace.notimeout(True)
         self.workspace.keypad(True)
@@ -335,10 +373,8 @@ class PotCommunCursesApplication(object):
         if resized:
             del self.workspace
             self.workspace = self.createWorkspace()
-        self.form.draw(self.workspace)
-
-        self.mainWindow.noutrefresh()
-        self.workspace.noutrefresh()
+            self.form.layout(self.workspace)
+        self.form.draw()
 
     def formatKey(self, ch, key):
 
@@ -346,9 +382,6 @@ class PotCommunCursesApplication(object):
             r = "None - XXX - XXX"
         else:
             r = key + " - " + str(ch) + " - '" + curses.unctrl(ch) + "'"
-        fd = open("/tmp/log", "a")
-        fd.write("-> %s" % r)
-        fd.close()
         return r
 
 
@@ -386,34 +419,30 @@ class PotCommunCursesApplication(object):
                     self.formStack.append(self.form)
                     self.form = newForm
                     self.form.onFocus()
+                self.form.layout(self.workspace)
 
     def prompt(self):
         ## See http://bugs.python.org/issue1687125
         try:
             try:
-                fd = open("/tmp/log", "a")
-
                 ch = -1
                 while ch == -1:
                     ch = self.mainWindow.getch()
-                    fd.write("ch -> %d\n" % (ch))
                     if ch == -1:
                         curses.doupdate()
-                        fd.write("doupdate\n")
                         continue
                     curses.ungetch(ch)
                     try:
                         key = self.mainWindow.getkey()
                     except Exception, e:
                         key = str(e.args)
-                    fd.write("key -> %s\n" % key)
 
-                fd.write("\n")
-                fd.close()
                 if ch == 13:
                     key = "KEY_RETURN"
                 elif ch == 27:
                     key = "KEY_ESCAPE"
+                elif ch == 9:
+                    key = "KEY_TAB"
 
                 return ch, key
             except KeyboardInterrupt:
@@ -453,3 +482,4 @@ def main(mainWindow):
     app.main()
 
 curses.wrapper(main)
+
