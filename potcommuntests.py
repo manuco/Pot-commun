@@ -247,13 +247,13 @@ class Tests(TestCase):
         expected = ((alice, 1, bob),)
         self.assertEqual(result, expected)
 
-    def test_partial_refunds(self):
+    def test_refunds(self):
         self.mgr.addRefund(Refund(self.bob, 2500, self.alice))
         result = self.mgr.computeDebts()
         expected = ()
         self.assertEqual(result, expected)
 
-    def test_refunds(self):
+    def test_partial_refunds(self):
         self.mgr.addRefund(Refund(self.bob, 500, self.alice))
         result = self.mgr.computeDebts()
         expected = ((self.bob, 2000, self.alice),)
