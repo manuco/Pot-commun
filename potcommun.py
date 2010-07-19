@@ -287,7 +287,6 @@ class DebtManager(object):
 
         persons = list(self.persons)
         persons.sort()
-        print persons
         for person in persons:
             print person.name
             print "=" * len(person.name) + "\n"
