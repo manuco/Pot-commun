@@ -197,6 +197,53 @@ class DebtManager(object):
             raise RuntimeError("Wrong balances!")
         return tuple(debts)
 
+    def getItemsPerPerson(self):
+        return self.getPaymentsOrItemsPerPerson(isPayment=False)
+
+    def getPaymentsPerPerson(self):
+        return self.getPaymentsOrItemsPerPerson(isPayment=True)
+
+
+    def getPaymentsOrItemsPerPerson(self, isPayment):
+        result = {}
+        for person in self.persons:
+            resultForPerson = {}
+            for outlay in self.outlays:
+                if person not in outlay.persons:
+                    continue
+                items = set()
+
+                amount = 0
+                elems = outlay.payments if isPayment else outlay.items
+                for elem in elems:
+                    amounts = elem.computeAmountPerPerson()
+                    try:
+                        if isPayment:
+                            items.add(amounts[person])
+                        else:
+                            items.add((elem.label, amounts[person]))
+                        amount += amounts[person]
+                    except KeyError:
+                        pass
+
+                perOutlayItemsTotals = AbstractPayment.computeTotals(outlay.items)
+                perOutlayPaymentsTotals = AbstractPayment.computeTotals(outlay.payments)
+                perOutlayItemsTotals, perOutlayPaymentsTotals = self.checkAndAdjustTotals(outlay.persons, perOutlayItemsTotals, perOutlayPaymentsTotals)
+
+                if isPayment:
+                    if amount < perOutlayPaymentsTotals[person]:
+                        items.add(perOutlayPaymentsTotals[person] - amount)
+                else:
+                    if amount < perOutlayItemsTotals[person]:
+                        items.add(("(1 / %d)" % len(outlay.persons), perOutlayItemsTotals[person] - amount))
+
+                if len(items) > 0:
+                    resultForPerson[(outlay.date, outlay.label)] = items
+            if len(resultForPerson.keys()) > 0:
+                result[person] = resultForPerson
+        return result
+
+
 class Outlay(object):
     def __init__(self, date, label):
         self.date = date
@@ -234,11 +281,7 @@ class AbstractPayment(object):
     def computeTotals(payments):
         results = {}
         for payment in payments:
-            divisor = len(payment.persons)
-            roundingError = payment.amount - ((payment.amount // divisor) * divisor)
-            for person in payment.persons:
-                amount = payment.amount // divisor + (1 if roundingError > 0 else 0)
-                roundingError -= 1
+            for person, amount in payment.computeAmountPerPerson().items():
                 if person in results.keys():
                     results[person] += amount
                 else:
@@ -254,6 +297,22 @@ class AbstractPayment(object):
                 totalsA[name] = amount
         return totalsA
 
+    def computeAmountPerPerson(self):
+        results = {}
+        divisor = len(self.persons)
+        roundingError = self.amount - ((self.amount // divisor) * divisor)
+        for person in self.persons:
+            amount = self.amount // divisor + (1 if roundingError > 0 else 0)
+            roundingError -= 1
+            results[person] = amount
+        return results
+
+
+    def __eq__(self, other):
+        if self.amount != other.amount:
+            return False
+        return self.persons == other.persons
+
 class Payment(AbstractPayment):
     pass
 
@@ -261,6 +320,12 @@ class Item(AbstractPayment):
     def __init__(self, persons, label, amount):
         AbstractPayment.__init__(self, persons, amount)
         self.label = label
+
+    def __eq__(self, other):
+        if self.label != other.label:
+            return False
+
+        return AbstractPayment.__eq__(self, other)
 
 class Person(object):
     def __init__(self, name):
@@ -304,7 +369,7 @@ class Refund(object):
     def __init__(self, debitPerson, amount, creditPerson):
         self.debitPerson = debitPerson
         self.amount = amount
-        self.creditPerson = creditPerson        
+        self.creditPerson = creditPerson
 
 
 
