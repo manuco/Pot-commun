@@ -279,19 +279,19 @@ class Tests(TestCase):
         result = self.mgr.getItemsPerPerson()
         expected = {
             Person("Alice"): {
-                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli"): set((
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
                     ("Starter", 500),
                     ("Course", 2000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((("ticket", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((("ticket", 1000), )),
             },
 
             Person("Bob"): {
-                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli"): set((
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
                     ("Course", 2500),
                     ("Wine", 1000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((("ticket", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((("ticket", 1000), )),
             },
         }
         self.assertEqual(result, expected)
@@ -318,22 +318,22 @@ class Tests(TestCase):
         result = mgr.getItemsPerPerson()
         expected = {
             Person("Alice"): {
-                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli"): set((
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
                     ("Starter", 500),
                     ("Course", 2000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
             },
 
             Person("Bob"): {
-                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli"): set((
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
                     ("Course", 2500),
                     ("Wine", 1000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
             },
             Person("Carl"): {
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
             },
         }
         self.assertEqual(result, expected)
@@ -362,22 +362,22 @@ class Tests(TestCase):
         result = mgr.getItemsPerPerson()
         expected = {
             Person("Alice"): {
-                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli"): set((
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
                     ("Starter", 500),
                     ("Course", 2000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
             },
 
             Person("Bob"): {
-                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli"): set((
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
                     ("Course", 2500),
                     ("Wine", 1000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
             },
             Person("Carl"): {
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
             },
         }
         self.assertEqual(result, expected)
@@ -388,13 +388,13 @@ class Tests(TestCase):
         result = self.mgr.getPaymentsPerPerson()
         expected = {
             Person("Alice"): {
-                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli"): set((
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
                     6000,
                 )),
             },
 
             Person("Bob"): {
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((2000, )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((2000, )),
             },
         }
         self.assertEqual(result, expected)
@@ -440,13 +440,13 @@ class Tests(TestCase):
 
         expected = {
             carl: {
-                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli"): set((
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
                     6000,
                 )),
             },
 
             Person("Bob"): {
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema"): set((3000, )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((3000, )),
             },
         }
 
