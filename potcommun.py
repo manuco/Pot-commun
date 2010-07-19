@@ -70,15 +70,10 @@ class DebtManager(object):
         self.outlays = set()
         self.refunds = set()
 
-    def addPerson(self, p):
-        if type(p) in (type(""), type(u"")):
-            raise ValueError("Person should not be a string.")
-
-        if  p not in self.persons:
-            self.persons.add(p)
-        else:
-            raise ValueError("Already registered")
-        return p
+    def addPersons(self, persons):
+        if type(persons) in (type(""), type(u"")):
+            raise ValueError("persons must be a non string iterable")
+        self.persons.update(persons)
 
     def getPerson(self, name):
         for person in self.persons:
@@ -91,6 +86,7 @@ class DebtManager(object):
         """
         outlay.mgr = self
         self.outlays.add(outlay)
+        self.addPersons(outlay.persons)
         return outlay
 
     def addRefund(self, refund):
@@ -254,7 +250,7 @@ class DebtManager(object):
 
         gdTotal = 0
         for dl in datesAndlabels:
-            print dl[0], "-", dl[1]
+            print dl[0], "-", dl[1], "(%s)" % format(dl[2] / 100, ".2f")
             total = 0
             for item in items[dl]:
                 print " -", item[0] + " " * (maxLabelLen - len(item[0])), format(item[1] / 100, " >8.2f")
@@ -264,6 +260,7 @@ class DebtManager(object):
             print
 
         print "Total" + " " * (maxLabelLen - 2), format(gdTotal / 100, " >8.2f"), "\n"
+        return gdTotal
 
     def printPayments(self, payments):
         print " +++ Paiements +++\n"
@@ -276,6 +273,7 @@ class DebtManager(object):
             gdTotal += sum(payments[dl])
         
         print "\nTotal   ", format(gdTotal / 100, " >8.2f"), "\n"
+        return gdTotal
 
 
     def printReport(self):
@@ -286,20 +284,25 @@ class DebtManager(object):
 
         persons = list(self.persons)
         persons.sort()
+        print persons
         for person in persons:
             print person.name
             print "=" * len(person.name) + "\n"
-
+            solde = 0
             try:
-                self.printItems(allItems[person])
+                solde = -self.printItems(allItems[person])
             except KeyError:
                 print "Pas de dépense"
             try:
-                self.printPayments(allPayments[person])
+                solde += self.printPayments(allPayments[person])
             except KeyError:
-                print "Pas de payment"
+                print "Pas de paiement"
 
-        print ""
+            print "Solde :", format(solde / 100, ".2f")
+        
+        print
+        for a, s, b in self.computeDebts():
+            print u"%s doit %s à %s" % (a, format(s / 100, ".2f"), b)
 
         
 
