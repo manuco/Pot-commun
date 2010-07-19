@@ -301,6 +301,7 @@ class DebtManager(object):
                 print "Pas de paiement"
 
             print "Solde :", format(solde / 100, ".2f")
+            print
         
         print
         for a, s, b in self.computeDebts():
