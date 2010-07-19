@@ -244,6 +244,65 @@ class DebtManager(object):
         return result
 
 
+    def printItems(self, items):
+        print " --- Dépenses ---\n"
+        datesAndlabels = items.keys()
+        datesAndlabels.sort()
+        maxLabelLen = 0
+        for dl in datesAndlabels:
+            maxLabelLen = max(maxLabelLen, *map(len, [d[0] for d in items[dl]]))
+
+        gdTotal = 0
+        for dl in datesAndlabels:
+            print dl[0], "-", dl[1]
+            total = 0
+            for item in items[dl]:
+                print " -", item[0] + " " * (maxLabelLen - len(item[0])), format(item[1] / 100, " >8.2f")
+                total += item[1]
+            gdTotal += total
+            print " =", "Total" + " " * (maxLabelLen - 5), format(total / 100, " >8.2f")
+            print
+
+        print "Total" + " " * (maxLabelLen - 2), format(gdTotal / 100, " >8.2f"), "\n"
+
+    def printPayments(self, payments):
+        print " +++ Paiements +++\n"
+        datesAndlabels = payments.keys()
+        datesAndlabels.sort()
+
+        gdTotal = 0
+        for dl in datesAndlabels:
+            print dl[0], "-", dl[1], " :", ", ".join([format(elem / 100, ".2f") for elem in payments[dl]]) + (" = " + format(sum(payments[dl]) / 100, ".2f") if len(payments[dl]) > 1 else "")
+            gdTotal += sum(payments[dl])
+        
+        print "\nTotal   ", format(gdTotal / 100, " >8.2f"), "\n"
+
+
+    def printReport(self):
+        print
+        allItems = self.getItemsPerPerson()
+        allPayments = self.getPaymentsPerPerson()
+
+
+        persons = list(self.persons)
+        persons.sort()
+        for person in persons:
+            print person.name
+            print "=" * len(person.name) + "\n"
+
+            try:
+                self.printItems(allItems[person])
+            except KeyError:
+                print "Pas de dépense"
+            try:
+                self.printPayments(allPayments[person])
+            except KeyError:
+                print "Pas de payment"
+
+        print ""
+
+        
+
 class Outlay(object):
     def __init__(self, date, label):
         self.date = date
