@@ -237,8 +237,11 @@ class DebtManager(object):
                     if amount < perOutlayItemsTotals[person]:
                         items.add(("(1 / %d)" % len(outlay.persons), perOutlayItemsTotals[person] - amount))
 
+                total = sum(perOutlayItemsTotals.values())
+                total2 = sum(perOutlayPaymentsTotals.values())
+                assert total == total2
                 if len(items) > 0:
-                    resultForPerson[(outlay.date, outlay.label)] = items
+                    resultForPerson[(outlay.date, outlay.label, total)] = items
             if len(resultForPerson.keys()) > 0:
                 result[person] = resultForPerson
         return result
