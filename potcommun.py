@@ -305,7 +305,7 @@ class DebtManager(object):
         
         print
         for a, s, b in self.computeDebts():
-            print u"%s doit %s à %s" % (a, format(s / 100, ".2f"), b)
+            print a, "doit", format(s / 100, ".2f"), "à", b
 
         
 
