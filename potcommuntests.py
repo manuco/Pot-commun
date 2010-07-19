@@ -262,7 +262,7 @@ class Tests(TestCase):
 
 
     def test_items_equality(self):
-        item1 = Item((Person("alice"), Person("Bob"),),  "abcd", 15)
+        item1 = Item((Person("alice"), Person("bob"),),  "abcd", 15)
         item2 = Item((Person("bob"), Person("alice"),), "abcd", 15)
         self.assertEqual(item1, item2)
 
@@ -298,21 +298,21 @@ class Tests(TestCase):
 
     def test_data_formaters_items2(self):
         mgr = DebtManager()
-        alice = mgr.addPersons((Person("Alice"), ))
-        bob = mgr.addPersons((Person("Bob"), ))
-        carl = mgr.addPersons((Person("Carl"), ))
+        alice = Person("Alice")
+        bob = Person("Bob")
+        carl = Person("Carl")
 
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
-        mgr.addOutlay(outlay)
         outlay.addItem(Item((alice,), "Starter", 500))
         outlay.addItem(Item((alice,), "Course", 2000))
         outlay.addItem(Item((bob,), "Course", 2500))
         outlay.addItem(Item((bob,), "Wine", 1000))
         outlay.addPayment(Payment((alice,), 6000))
-        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         mgr.addOutlay(outlay)
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         outlay.addPersons((alice, bob, carl))
         outlay.addPayment(Payment((bob,), 3000))
+        mgr.addOutlay(outlay)
         
 
         result = mgr.getItemsPerPerson()
@@ -342,21 +342,22 @@ class Tests(TestCase):
 
     def test_data_formaters_items3(self):
         mgr = DebtManager()
-        alice = mgr.addPersons((Person("Alice"), ))
-        bob = mgr.addPersons((Person("Bob"), ))
-        carl = mgr.addPersons((Person("Carl"), ))
+        alice = Person("Alice")
+        bob = Person("Bob")
+        carl = Person("Carl")
 
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
-        mgr.addOutlay(outlay)
         outlay.addItem(Item((alice,), "Starter", 500))
         outlay.addItem(Item((alice,), "Course", 2000))
         outlay.addItem(Item((bob,), "Course", 2500))
         outlay.addItem(Item((bob,), "Wine", 1000))
         outlay.addPayment(Payment((carl,), 6000))
-        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         mgr.addOutlay(outlay)
+
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         outlay.addPersons((alice, bob, carl))
         outlay.addPayment(Payment((bob,), 3000))
+        mgr.addOutlay(outlay)
 
 
         result = mgr.getItemsPerPerson()
@@ -400,21 +401,22 @@ class Tests(TestCase):
         self.assertEqual(result, expected)
 
         mgr = DebtManager()
-        alice = mgr.addPersons((Person("Alice"), ))
-        bob = mgr.addPersons((Person("Bob"), ))
+        alice = Person("Alice")
+        bob = Person("Bob")
 
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
-        mgr.addOutlay(outlay)
         outlay.addItem(Item((alice,), "Starter", 500))
         outlay.addItem(Item((alice,), "Course", 2000))
         outlay.addItem(Item((bob,), "Course", 2500))
         outlay.addItem(Item((bob,), "Wine", 1000))
         outlay.addPayment(Payment((alice,), 6000))
+        mgr.addOutlay(outlay)
+
         
         outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
-        mgr.addOutlay(outlay)
         outlay.addPersons((alice, bob))
         outlay.addPayment(Payment((bob,), 2000))
+        mgr.addOutlay(outlay)
 
         result = mgr.getPaymentsPerPerson()
         self.assertEqual(result, expected)
@@ -422,21 +424,22 @@ class Tests(TestCase):
     def test_data_formaters_payments2(self):
 
         mgr = DebtManager()
-        alice = mgr.addPersons((Person("Alice"), ))
-        bob = mgr.addPersons((Person("Bob"), ))
-        carl = mgr.addPersons((Person("Carl"), ))
+        alice = Person("Alice")
+        bob = Person("Bob")
+        carl = Person("Carl")
 
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
-        mgr.addOutlay(outlay)
         outlay.addItem(Item((alice,), "Starter", 500))
         outlay.addItem(Item((alice,), "Course", 2000))
         outlay.addItem(Item((bob,), "Course", 2500))
         outlay.addItem(Item((bob,), "Wine", 1000))
         outlay.addPayment(Payment((carl,), 6000))
-        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         mgr.addOutlay(outlay)
+
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         outlay.addPersons((alice, bob, carl))
         outlay.addPayment(Payment((bob,), 3000))
+        mgr.addOutlay(outlay)
 
         expected = {
             carl: {
