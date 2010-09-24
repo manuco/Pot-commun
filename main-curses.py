@@ -32,7 +32,6 @@ class BaseForm(object):
             @return the new form to display (self is right), or None to quit, or
             an int corresponding to the forms to unstack (usualy 1).
         """
-        # noop
         if ch == 27:
             return 1
         elif key in ("q", "Q"):
@@ -92,6 +91,22 @@ class BaseForm(object):
     def drawStr(self, label, color=None):
         self.win.addstr(0, 0, label, color if color is not None else WHITE)
 
+class Label(BaseForm):
+    def __init__(self, height, width):
+        self.height = height
+        self.width = width
+        self.text = ""
+        self.color = WHITE
+        
+    def setText(self, text, color=None):
+        self.text = (text[:self.width]).encode("utf-8")
+        self.color = WHITE if color is None else color
+
+    def draw(self):
+        self.win.addstr(0, 0, self.text, self.color)
+
+    def getSubwinParams(self, y, win):
+        return self.height, self.width, y, 2
 
 class BaseMenu(BaseForm):
     def __init__(self, items, selected=None):
@@ -182,14 +197,15 @@ class StackedFields(BaseForm):
         self.focusedFieldIndex = 0
 
     def onInput(self, ch, key):
-        if key in ("KEY_TAB", "KEY_RETURN"):
+        if key in ("KEY_TAB", "KEY_RETURN", "KEY_DOWN"):
             self.focusedFieldIndex += 1
             while self.focusedFieldIndex < len(self.fields) and\
                 not self.focus_ok[self.focusedFieldIndex]:
                 self.focusedFieldIndex += 1    
             if self.focusedFieldIndex == len(self.fields):
-                return "LAST_FIELD_FOCUS" if key == "KEY_TAB" else "ACCEPT"
-        elif key == "KEY_BTAB":
+                return "ACCEPT" if key == "KEY_RETURN" else "LAST_FIELD_FOCUS"
+        elif key in ("KEY_BTAB", "KEY_UP"):
+            # Focus management has to be improved here
             self.focusedFieldIndex -= 1
             if self.focusedFieldIndex < 0:
                 self.focusedFieldIndex = len(self.fields) - 1
@@ -405,8 +421,7 @@ class OutlayEditForm(BaseForm):
         self.stack = StackedFields()
         self.nameField = InputField(u"Nom : ", outlay.label)
         self.dateField = InputField(u"Date : ", unicode(outlay.date.strftime("%Y-%m-%d %H:%M:%S")))
-        self.errorMsg = BaseForm()
-        self.errorMsg.getSubwinParams = lambda y, win: (1, 90, y, 2)
+        self.errorMsg = Label(1, 90)
         self.stack.add(self.nameField)
         self.stack.add(self.dateField)
         self.stack.add(self.errorMsg, focusable=False)
@@ -423,6 +438,7 @@ class OutlayEditForm(BaseForm):
         self.stack.draw()
         
     def onInput(self, ch, key):
+        self.errorMsg.setText(u"")
         action = self.stack.onInput(ch, key)
         if action == "ACCEPT":
             try:
@@ -435,7 +451,7 @@ class OutlayEditForm(BaseForm):
                 db.saveDebtManager(self.dm)
                 return 1
             except Exception, e:
-                self.errorMsg.drawStr(e.args[0][:90])
+                self.errorMsg.setText(e.args[0].decode("utf-8"), RED)
                 self.stack.resetFocus()
                 return self                
             
