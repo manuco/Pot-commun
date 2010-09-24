@@ -89,6 +89,9 @@ class BaseForm(object):
         x = mx // 2 - len(title) // 2
         self.win.addstr(1, x, title, WHITE)
 
+    def drawStr(self, label, color=None):
+        self.win.addstr(0, 0, label, color if color is not None else WHITE)
+
 
 class BaseMenu(BaseForm):
     def __init__(self, items, selected=None):
@@ -149,10 +152,12 @@ class BaseMenu(BaseForm):
 class StackedFields(BaseForm):
     def __init__(self):
         self.fields = []
+        self.focus_ok = []
         self.focusedFieldIndex = 0
         
-    def add(self, field):
+    def add(self, field, focusable=True):
         self.fields.append(field)
+        self.focus_ok.append(focusable)
         
     def layout(self, win):
         self.win = win
@@ -171,12 +176,19 @@ class StackedFields(BaseForm):
                 field.draw()
         ## the focused field is drawn last
         self.fields[self.focusedFieldIndex].draw()
-        self.subwins[self.focusedFieldIndex].addstr(0, 0, ">")
+        self.win.addstr(self.focusedFieldIndex, 0, ">")
+
+    def resetFocus(self):
+        self.focusedFieldIndex = 0
 
     def onInput(self, ch, key):
-        if key == "KEY_TAB":
+        if key in ("KEY_TAB", "KEY_RETURN"):
             self.focusedFieldIndex += 1
-            self.focusedFieldIndex %= len(self.fields)
+            while self.focusedFieldIndex < len(self.fields) and\
+                not self.focus_ok[self.focusedFieldIndex]:
+                self.focusedFieldIndex += 1    
+            if self.focusedFieldIndex == len(self.fields):
+                return "LAST_FIELD_FOCUS" if key == "KEY_TAB" else "ACCEPT"
         elif key == "KEY_BTAB":
             self.focusedFieldIndex -= 1
             if self.focusedFieldIndex < 0:
@@ -187,13 +199,15 @@ class StackedFields(BaseForm):
 
 class InputField(BaseForm):
     def __init__(self, prompt, defaultValue=u""):
+        if type(prompt) != type(u""):
+            raise UnicodeError("prompt must be unicode")
         self.prompt = prompt
         self.pos = len(defaultValue)
         self.userInput = defaultValue
         self.unicodeBuffer = ""
 
     def draw(self):
-        self.win.addstr(0, 0, self.prompt + self.userInput, WHITE)
+        self.win.addstr(0, 0, (self.prompt + self.userInput).encode("utf-8"), WHITE)
         self.win.move(0, len(self.prompt) + self.pos)
         self.win.cursyncup()
 
@@ -261,9 +275,8 @@ class WelcomeForm(BaseForm):
 class DebtManagerForm(BaseForm):
     def __init__(self, dm):
         self.dm = dm
-        self.outlays = self.getOutlays()
-        self.menu = BaseMenu(self.outlays)
-        
+        self.onFocus()        
+                
     def getOutlays(self):
         r = [(o.label.encode("utf-8"), o) for o in self.dm.outlays]
         r.append(("Nouvelle dépense...", None))
@@ -281,17 +294,25 @@ class DebtManagerForm(BaseForm):
     def onInput(self, ch, key):
         action = self.menu.onInput(ch, key)
         if action == "DELETE":
-            ## XXX
-            self.deleteDM(self.menu.getSelectedItem())
-            self.menu = BaseMenu(self.getDMs(), self.menu.getSelectedIndex())
+            self.dm.outlays.remove(self.menu.getSelectedItem())
+            db = getDB()
+            db.saveDebtManager(self.dm)
+
+            self.onFocus()
             self.layout(self.win)
+            return self
         elif action == "ACCEPT":
             outlay = self.menu.getSelectedItem()
             if outlay is None:
                 outlay = sqlstorage.Outlay(datetime.datetime.now(), "")
-            return OutlayEditForm(outlay)
+            return OutlayEditForm(self.dm, outlay)
         else:
             return BaseForm.onInput(self, ch, key)
+
+    def onFocus(self):
+        self.outlays = self.getOutlays()
+        self.menu = BaseMenu(self.outlays)
+
 
 
 class DebtManagerSelection(BaseForm):
@@ -355,7 +376,7 @@ class DebtManagerSelection(BaseForm):
 class NewDebtManagerForm(BaseForm):
 
     def __init__(self):
-        self.inputField = InputField("Nom : ")
+        self.inputField = InputField(u"Nom : ")
 
     def layout(self, win):
         self.win = win
@@ -378,16 +399,17 @@ class NewDebtManagerForm(BaseForm):
     	return self
 
 class OutlayEditForm(BaseForm):
-    def __init__(self, outlay):
+    def __init__(self, dm, outlay):
+        self.dm = dm
         self.outlay = outlay
         self.stack = StackedFields()
-        self.nameField = InputField("Nom : ", outlay.label)
-        self.dateField = InputField("Date : ", unicode(outlay.date))
+        self.nameField = InputField(u"Nom : ", outlay.label)
+        self.dateField = InputField(u"Date : ", unicode(outlay.date.strftime("%Y-%m-%d %H:%M:%S")))
         self.errorMsg = BaseForm()
-        self.errorMsg.getSubwinParams = lambda y, win: (1, 50, y, 2)
+        self.errorMsg.getSubwinParams = lambda y, win: (1, 90, y, 2)
         self.stack.add(self.nameField)
         self.stack.add(self.dateField)
-        self.stack.add(self.errorMsg)
+        self.stack.add(self.errorMsg, focusable=False)
         
         
     def layout(self, win):
@@ -401,7 +423,27 @@ class OutlayEditForm(BaseForm):
         self.stack.draw()
         
     def onInput(self, ch, key):
-        if self.stack.onInput(ch, key):
+        action = self.stack.onInput(ch, key)
+        if action == "ACCEPT":
+            try:
+                self.outlay.label = self.nameField.getUserInput()
+                self.outlay.date = datetime.datetime.strptime(self.dateField.getUserInput(), "%Y-%m-%d %H:%M:%S")
+                self.dateField.getUserInput()
+                if self.outlay not in self.dm.outlays:
+                    self.dm.outlays.add(self.outlay)
+                db = getDB()
+                db.saveDebtManager(self.dm)
+                return 1
+            except Exception, e:
+                self.errorMsg.drawStr(e.args[0][:90])
+                self.stack.resetFocus()
+                return self                
+            
+            
+        if action == "LAST_FIELD_FOCUS":
+            self.stack.resetFocus()
+            return self
+        elif action is True:
             return self
         else:
             return 1
