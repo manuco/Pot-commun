@@ -41,35 +41,32 @@ class BaseForm(object):
     def onFocus(self):
         pass
 
-    def drawBox(self, y, x, height, width, color):
+    def drawBox(self, y, x, height, width, color=None):
         """
             Draw a box.
 
             Height must be a least 3 to have one line inside it. Same for width.
         """
         ## corners
-        #win.addstr(0,0,str(width))
-
+        color = WHITE if color is None else color
         my, mx = self.win.getmaxyx()
         if mx < x + width or my < y + height or x < 0 or y < 0:
             return
 
-        self.win.addch(y, x, c.ACS_ULCORNER , WHITE)
-        self.win.addch(y, x + width - 1, c.ACS_URCORNER , WHITE)
-        self.win.addch(y + height - 1, x + width - 1, c.ACS_LRCORNER , WHITE)
-        self.win.addch(y + height - 1, x, c.ACS_LLCORNER , WHITE)
+        self.win.addch(y, x, c.ACS_ULCORNER , color)
+        self.win.addch(y, x + width - 1, c.ACS_URCORNER , color)
+        try: # The lower right caracter raises an exception, but is drawn...
+            self.win.addch(y + height - 1, x + width - 1, c.ACS_LRCORNER , color)
+        except Exception:
+            pass
+        self.win.addch(y + height - 1, x, c.ACS_LLCORNER , color)
         for n in range(width - 2):
-            self.win.addch(y, x + n + 1, c.ACS_HLINE, WHITE)
-            #win.addstr(y, x + n + 1, str(n)[-1], WHITE)
-            self.win.addch(y + height - 1, x + n + 1, c.ACS_HLINE, WHITE)
+            self.win.addch(y, x + n + 1, c.ACS_HLINE, color)
+            self.win.addch(y + height - 1, x + n + 1, c.ACS_HLINE, color)
 
         for n in range(height - 2):
-            self.win.addch(y + n + 1, x, c.ACS_VLINE, WHITE)
-            self.win.addch(y + n + 1, x + width - 1, c.ACS_VLINE, WHITE)
-
-        #for i in range(60):
-            #win.addstr(2, i, str(i)[-1], WHITE)
-        #win.addstr(1,0,str(x + width - 1))
+            self.win.addch(y + n + 1, x, c.ACS_VLINE, color)
+            self.win.addch(y + n + 1, x + width - 1, c.ACS_VLINE, color)
 
     def drawAutoResizeBox(self, y, height, margin, color):
         my, mx = self.win.getmaxyx()
