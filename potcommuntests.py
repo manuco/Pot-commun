@@ -12,8 +12,9 @@ class Tests(TestCase):
     def setUp(self):
 
         mgr = DebtManager()
-        self.alice = alice = mgr.addPerson(Person("Alice"))
-        self.bob = bob = mgr.addPerson(Person("Bob"))
+        self.alice = alice = Person("Alice")
+        self.bob = bob = Person("Bob")
+        mgr.addPersons((alice, bob))
 
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
         mgr.addOutlay(outlay)
@@ -33,8 +34,8 @@ class Tests(TestCase):
             A person should be inserted as a Person, not as a String.
         """
         mgr = DebtManager()
-        self.assertRaises(Exception, mgr.addPerson, "Alice")
-        mgr.addPerson(Person("Alice"))
+        self.assertRaises(Exception, mgr.addPersons, "Alice")
+        mgr.addPersons((Person("Alice"), ))
 
         alice = mgr.getPerson("Alice")
         self.assertRaises(Exception, Item, ("Alice",), "Starter", 500)
@@ -51,8 +52,8 @@ class Tests(TestCase):
             Bob pays for it.
         """
         mgr = DebtManager()
-        alice = mgr.addPerson(Person("Alice"))
-        bob = mgr.addPerson(Person("Bob"))
+        alice = Person("Alice")
+        bob = Person("Bob")
 
         # When, what, how much, in cents
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
@@ -117,8 +118,8 @@ class Tests(TestCase):
 
     def test_with_missing_info(self):
         mgr = DebtManager()
-        alice = mgr.addPerson(Person("Alice"))
-        bob = mgr.addPerson(Person("Bob"))
+        alice = Person("Alice")
+        bob = Person("Bob")
         outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         mgr.addOutlay(outlay)
         outlay.addPayment(Payment((bob,), 2000))
@@ -133,7 +134,7 @@ class Tests(TestCase):
         expected = ()
         self.assertEqual(result, expected)
 
-        alice = mgr.addPerson(Person("Alice"))
+        alice = Person("Alice")
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "T1")
         mgr.addOutlay(outlay)
         outlay.addItem(Item((alice,), "A", 1))
@@ -142,7 +143,7 @@ class Tests(TestCase):
         expected = ()
         self.assertEqual(result, expected)
 
-        bob = mgr.addPerson(Person("Bob"))
+        bob = Person("Bob")
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "T2")
         mgr.addOutlay(outlay)
         outlay.addItem(Item((alice,), "A", 1))
@@ -174,11 +175,11 @@ class Tests(TestCase):
 
     def test_real_example(self):
         mgr = DebtManager()
-        alice = mgr.addPerson(Person("Alice"))
-        bob = mgr.addPerson(Person("Bob"))
-        cesar = mgr.addPerson(Person("Cesar"))
-        daniel = mgr.addPerson(Person("Daniel"))
-        empu = mgr.addPerson(Person("Empu"))
+        alice = Person("Alice")
+        bob = Person("Bob")
+        cesar = Person("Cesar")
+        daniel = Person("Daniel")
+        empu = Person("Empu")
 
         outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "T1")
         mgr.addOutlay(outlay)
@@ -232,8 +233,8 @@ class Tests(TestCase):
 
     def test_rounding_bug_when_item_payment_balance_is_not_null(self):
         mgr = DebtManager()
-        alice = mgr.addPerson(Person("Alice"))
-        bob = mgr.addPerson(Person("Bob"))
+        alice = Person("Alice")
+        bob = Person("Bob")
         outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
         mgr.addOutlay(outlay)
         outlay.addPayment(Payment((bob,), 3))
@@ -242,13 +243,13 @@ class Tests(TestCase):
         expected = ((alice, 1, bob),)
         self.assertEqual(result, expected)
 
-    def test_partial_refunds(self):
+    def test_refunds(self):
         self.mgr.addRefund(Refund(self.bob, 2500, self.alice))
         result = self.mgr.computeDebts()
         expected = ()
         self.assertEqual(result, expected)
 
-    def test_refunds(self):
+    def test_partial_refunds(self):
         self.mgr.addRefund(Refund(self.bob, 500, self.alice))
         result = self.mgr.computeDebts()
         expected = ((self.bob, 2000, self.alice),)
@@ -264,4 +265,202 @@ class Tests(TestCase):
         dm = db.getManagers()[0]
         r = dm.computeBalances()
         self.assertEqual(r, {self.alice: -2500, self.bob: 2500})
+
+    def test_items_equality(self):
+        item1 = Item((Person("alice"), Person("bob"),),  "abcd", 15)
+        item2 = Item((Person("bob"), Person("alice"),), "abcd", 15)
+        self.assertEqual(item1, item2)
+
+        item3 = Item((Person("alice"), ), "abcd", 15)
+        self.assertNotEqual(item1, item3)
+
+        item4 = Item((Person("alice"), ), "abcd", 16)
+        self.assertNotEqual(item4, item3)
+
+        item5 = Item((Person("alice"), ), "abcde", 16)
+        self.assertNotEqual(item4, item5)
+
+    def test_data_formaters_items(self):
+        result = self.mgr.getItemsPerPerson()
+        expected = {
+            Person("Alice"): {
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
+                    ("Starter", 500),
+                    ("Course", 2000),
+                )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((("ticket", 1000), )),
+            },
+
+            Person("Bob"): {
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
+                    ("Course", 2500),
+                    ("Wine", 1000),
+                )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((("ticket", 1000), )),
+            },
+        }
+        self.assertEqual(result, expected)
+
+    def test_data_formaters_items2(self):
+        mgr = DebtManager()
+        alice = Person("Alice")
+        bob = Person("Bob")
+        carl = Person("Carl")
+
+        outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
+        outlay.addItem(Item((alice,), "Starter", 500))
+        outlay.addItem(Item((alice,), "Course", 2000))
+        outlay.addItem(Item((bob,), "Course", 2500))
+        outlay.addItem(Item((bob,), "Wine", 1000))
+        outlay.addPayment(Payment((alice,), 6000))
+        mgr.addOutlay(outlay)
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
+        outlay.addPersons((alice, bob, carl))
+        outlay.addPayment(Payment((bob,), 3000))
+        mgr.addOutlay(outlay)
+        
+
+        result = mgr.getItemsPerPerson()
+        expected = {
+            Person("Alice"): {
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
+                    ("Starter", 500),
+                    ("Course", 2000),
+                )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+            },
+
+            Person("Bob"): {
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
+                    ("Course", 2500),
+                    ("Wine", 1000),
+                )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+            },
+            Person("Carl"): {
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+            },
+        }
+        self.assertEqual(result, expected)
+
+
+
+    def test_data_formaters_items3(self):
+        mgr = DebtManager()
+        alice = Person("Alice")
+        bob = Person("Bob")
+        carl = Person("Carl")
+
+        outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
+        outlay.addItem(Item((alice,), "Starter", 500))
+        outlay.addItem(Item((alice,), "Course", 2000))
+        outlay.addItem(Item((bob,), "Course", 2500))
+        outlay.addItem(Item((bob,), "Wine", 1000))
+        outlay.addPayment(Payment((carl,), 6000))
+        mgr.addOutlay(outlay)
+
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
+        outlay.addPersons((alice, bob, carl))
+        outlay.addPayment(Payment((bob,), 3000))
+        mgr.addOutlay(outlay)
+
+
+        result = mgr.getItemsPerPerson()
+        expected = {
+            Person("Alice"): {
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
+                    ("Starter", 500),
+                    ("Course", 2000),
+                )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+            },
+
+            Person("Bob"): {
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
+                    ("Course", 2500),
+                    ("Wine", 1000),
+                )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+            },
+            Person("Carl"): {
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+            },
+        }
+        self.assertEqual(result, expected)
+
+
+
+    def test_data_formaters_payments(self):
+        result = self.mgr.getPaymentsPerPerson()
+        expected = {
+            Person("Alice"): {
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
+                    6000,
+                )),
+            },
+
+            Person("Bob"): {
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((2000, )),
+            },
+        }
+        self.assertEqual(result, expected)
+
+        mgr = DebtManager()
+        alice = Person("Alice")
+        bob = Person("Bob")
+
+        outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
+        outlay.addItem(Item((alice,), "Starter", 500))
+        outlay.addItem(Item((alice,), "Course", 2000))
+        outlay.addItem(Item((bob,), "Course", 2500))
+        outlay.addItem(Item((bob,), "Wine", 1000))
+        outlay.addPayment(Payment((alice,), 6000))
+        mgr.addOutlay(outlay)
+
+        
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
+        outlay.addPersons((alice, bob))
+        outlay.addPayment(Payment((bob,), 2000))
+        mgr.addOutlay(outlay)
+
+        result = mgr.getPaymentsPerPerson()
+        self.assertEqual(result, expected)
+
+    def test_data_formaters_payments2(self):
+
+        mgr = DebtManager()
+        alice = Person("Alice")
+        bob = Person("Bob")
+        carl = Person("Carl")
+
+        outlay = Outlay(datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli")
+        outlay.addItem(Item((alice,), "Starter", 500))
+        outlay.addItem(Item((alice,), "Course", 2000))
+        outlay.addItem(Item((bob,), "Course", 2500))
+        outlay.addItem(Item((bob,), "Wine", 1000))
+        outlay.addPayment(Payment((carl,), 6000))
+        mgr.addOutlay(outlay)
+
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
+        outlay.addPersons((alice, bob, carl))
+        outlay.addPayment(Payment((bob,), 3000))
+        mgr.addOutlay(outlay)
+
+        expected = {
+            carl: {
+                (datetime(2010, 3, 15, 20, 0, 0), "Restaurant le Grizzli", 6000): set((
+                    6000,
+                )),
+            },
+
+            Person("Bob"): {
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((3000, )),
+            },
+        }
+
+        result = mgr.getPaymentsPerPerson()
+        self.assertEqual(result, expected)
+
+    def test_report(self):
+        self.mgr.printReport()
 

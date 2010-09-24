@@ -73,15 +73,10 @@ class DebtManager(object):
         self.outlays = set()
         self.refunds = set()
 
-    def addPerson(self, p):
-        if type(p) in (type(""), type(u"")):
-            raise ValueError("Person should not be a string.")
-
-        if  p not in self.persons:
-            self.persons.add(p)
-        else:
-            raise ValueError("Already registered")
-        return p
+    def addPersons(self, persons):
+        if type(persons) in (type(""), type(u"")):
+            raise ValueError("persons must be a non string iterable")
+        self.persons.update(persons)
 
     def getPerson(self, name):
         for person in self.persons:
@@ -94,6 +89,7 @@ class DebtManager(object):
         """
         outlay.mgr = self
         self.outlays.add(outlay)
+        self.addPersons(outlay.persons)
         return outlay
 
     def addRefund(self, refund):
@@ -200,6 +196,122 @@ class DebtManager(object):
             raise RuntimeError("Wrong balances!")
         return tuple(debts)
 
+    def getItemsPerPerson(self):
+        return self.getPaymentsOrItemsPerPerson(isPayment=False)
+
+    def getPaymentsPerPerson(self):
+        return self.getPaymentsOrItemsPerPerson(isPayment=True)
+
+
+    def getPaymentsOrItemsPerPerson(self, isPayment):
+        result = {}
+        for person in self.persons:
+            resultForPerson = {}
+            for outlay in self.outlays:
+                if person not in outlay.persons:
+                    continue
+                items = set()
+
+                amount = 0
+                elems = outlay.payments if isPayment else outlay.items
+                for elem in elems:
+                    amounts = elem.computeAmountPerPerson()
+                    try:
+                        if isPayment:
+                            items.add(amounts[person])
+                        else:
+                            items.add((elem.label, amounts[person]))
+                        amount += amounts[person]
+                    except KeyError:
+                        pass
+
+                perOutlayItemsTotals = AbstractPayment.computeTotals(outlay.items)
+                perOutlayPaymentsTotals = AbstractPayment.computeTotals(outlay.payments)
+                perOutlayItemsTotals, perOutlayPaymentsTotals = self.checkAndAdjustTotals(outlay.persons, perOutlayItemsTotals, perOutlayPaymentsTotals)
+
+                if isPayment:
+                    if amount < perOutlayPaymentsTotals[person]:
+                        items.add(perOutlayPaymentsTotals[person] - amount)
+                else:
+                    if amount < perOutlayItemsTotals[person]:
+                        items.add(("(1 / %d)" % len(outlay.persons), perOutlayItemsTotals[person] - amount))
+
+                total = sum(perOutlayItemsTotals.values())
+                total2 = sum(perOutlayPaymentsTotals.values())
+                assert total == total2
+                if len(items) > 0:
+                    resultForPerson[(outlay.date, outlay.label, total)] = items
+            if len(resultForPerson.keys()) > 0:
+                result[person] = resultForPerson
+        return result
+
+
+    def printItems(self, items):
+        print " --- Dépenses ---\n"
+        datesAndlabels = items.keys()
+        datesAndlabels.sort()
+        maxLabelLen = 0
+        for dl in datesAndlabels:
+            maxLabelLen = max(maxLabelLen, *map(len, [d[0] for d in items[dl]]))
+
+        gdTotal = 0
+        for dl in datesAndlabels:
+            print dl[0], "-", dl[1], "(%s)" % format(dl[2] / 100, ".2f")
+            total = 0
+            for item in items[dl]:
+                print " -", item[0] + " " * (maxLabelLen - len(item[0])), format(item[1] / 100, " >8.2f")
+                total += item[1]
+            gdTotal += total
+            print " =", "Total" + " " * (maxLabelLen - 5), format(total / 100, " >8.2f")
+            print
+
+        print "Total" + " " * (maxLabelLen - 2), format(gdTotal / 100, " >8.2f"), "\n"
+        return gdTotal
+
+    def printPayments(self, payments):
+        print " +++ Paiements +++\n"
+        datesAndlabels = payments.keys()
+        datesAndlabels.sort()
+
+        gdTotal = 0
+        for dl in datesAndlabels:
+            print dl[0], "-", dl[1], " :", ", ".join([format(elem / 100, ".2f") for elem in payments[dl]]) + (" = " + format(sum(payments[dl]) / 100, ".2f") if len(payments[dl]) > 1 else "")
+            gdTotal += sum(payments[dl])
+        
+        print "\nTotal   ", format(gdTotal / 100, " >8.2f"), "\n"
+        return gdTotal
+
+
+    def printReport(self):
+        print
+        allItems = self.getItemsPerPerson()
+        allPayments = self.getPaymentsPerPerson()
+
+
+        persons = list(self.persons)
+        persons.sort()
+        for person in persons:
+            print person.name
+            print "=" * len(person.name) + "\n"
+            solde = 0
+            try:
+                solde = -self.printItems(allItems[person])
+            except KeyError:
+                print "Pas de dépense"
+            try:
+                solde += self.printPayments(allPayments[person])
+            except KeyError:
+                print "Pas de paiement"
+
+            print "Solde :", format(solde / 100, ".2f")
+            print
+        
+        print
+        for a, s, b in self.computeDebts():
+            print a, "doit", format(s / 100, ".2f"), "à", b
+
+        
+
 class Outlay(object):
     def __init__(self, date, label):
         self.date = date
@@ -237,11 +349,7 @@ class AbstractPayment(object):
     def computeTotals(payments):
         results = {}
         for payment in payments:
-            divisor = len(payment.persons)
-            roundingError = payment.amount - ((payment.amount // divisor) * divisor)
-            for person in payment.persons:
-                amount = payment.amount // divisor + (1 if roundingError > 0 else 0)
-                roundingError -= 1
+            for person, amount in payment.computeAmountPerPerson().items():
                 if person in results.keys():
                     results[person] += amount
                 else:
@@ -257,6 +365,22 @@ class AbstractPayment(object):
                 totalsA[name] = amount
         return totalsA
 
+    def computeAmountPerPerson(self):
+        results = {}
+        divisor = len(self.persons)
+        roundingError = self.amount - ((self.amount // divisor) * divisor)
+        for person in self.persons:
+            amount = self.amount // divisor + (1 if roundingError > 0 else 0)
+            roundingError -= 1
+            results[person] = amount
+        return results
+
+
+    def __eq__(self, other):
+        if self.amount != other.amount:
+            return False
+        return self.persons == other.persons
+
 class Payment(AbstractPayment):
     pass
 
@@ -264,6 +388,12 @@ class Item(AbstractPayment):
     def __init__(self, persons, label, amount):
         AbstractPayment.__init__(self, persons, amount)
         self.label = label
+
+    def __eq__(self, other):
+        if self.label != other.label:
+            return False
+
+        return AbstractPayment.__eq__(self, other)
 
 class Person(object):
     def __init__(self, name):
@@ -307,7 +437,7 @@ class Refund(object):
     def __init__(self, debitPerson, amount, creditPerson):
         self.debitPerson = debitPerson
         self.amount = amount
-        self.creditPerson = creditPerson        
+        self.creditPerson = creditPerson
 
 
 
