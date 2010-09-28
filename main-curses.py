@@ -161,6 +161,49 @@ class BaseMenu(BaseForm):
             label += " " * (maxlen - len(label))
             self.win.addstr(1 + i, 6, label, color | c.A_REVERSE if i == selectedRow else 0)
 
+class Splitter(BaseForm):
+    def __init__(self):
+        self.focusLeftPane = True
+        self.leftPane = BaseForm()
+        self.rightPane = BaseForm()
+        self.leftColor = WHITE
+        self.rightColor = WHITE
+        self.leftTitle = None
+        self.rightTitle = None
+        
+    def addLeftPane(field, title=None, color=None):
+        self.leftPane = field
+        self.leftTitle = title
+        self.leftColor = WHITE if color is None else color
+
+    def layout(self, win):
+        self.win = win
+        self.xmax = xmax = win.getmaxyx()[1]
+        self.ymax = ymax = win.getmaxyx()[0]
+        
+        middle = xmax // 2
+        
+        self.leftWin = win.derwin(ymax - 2, middle - 4, 1, 2)
+        self.rightWin = win.derwin(ymax - 2, middle - 4, 1, middle + 2)
+        if self.leftPane is not None:
+            self.leftPane.layout(self.leftWin)
+        if self.rightPane is not None:
+            self.rightPane.layout(self.rightWin)
+        
+
+    def draw(self):
+        middle = self.xmax // 2
+        self.drawBox(0, 0, self.ymax, middle, RED)
+        self.drawBox(0, middle, self.ymax, middle, GREEN)
+        
+        xmax = self.leftPane.win.getmaxyx()[1]
+        ymax = self.leftPane.win.getmaxyx()[0]
+        self.leftPane.drawBox(0, 0, ymax, xmax)
+        
+        xmax = self.rightPane.win.getmaxyx()[1]
+        ymax = self.rightPane.win.getmaxyx()[0]
+        self.rightPane.drawBox(0, 0, ymax, xmax)
+
 class StackedFields(BaseForm):
     def __init__(self):
         self.fields = []
@@ -318,7 +361,8 @@ class DebtManagerForm(BaseForm):
             outlay = self.menu.getSelectedItem()
             if outlay is None:
                 outlay = sqlstorage.Outlay(datetime.datetime.now(), "")
-            return OutlayEditForm(self.dm, outlay)
+                return OutlayEditForm(self.dm, outlay)
+            return OutlayManagementForm(self.dm, outlay)
         else:
             return BaseForm.onInput(self, ch, key)
 
@@ -461,6 +505,19 @@ class OutlayEditForm(BaseForm):
         else:
             return 1
 
+
+class OutlayManagementForm(BaseForm):
+    def __init__(self, dm, outlay):
+        self.outlay = outlay
+        self.dm = dm
+
+        self.splitter = Splitter()
+
+    def layout(self, win):
+        self.splitter.layout(win)
+        
+    def draw(self):
+        self.splitter.draw()
 
 class PotCommunCursesApplication(object):
 
