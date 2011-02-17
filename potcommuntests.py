@@ -249,17 +249,16 @@ class Tests(TestCase):
         self.assertEqual(result, expected)
 
     def test_refunds(self):
-        self.mgr.addRefund(Refund(self.bob, 2500, self.alice))
+        self.mgr.addRefund(Refund(datetime(2010, 3, 16, 21, 0, 0), self.bob, 2500, self.alice))
         result = self.mgr.computeDebts()
         expected = ()
         self.assertEqual(result, expected)
 
     def test_partial_refunds(self):
-        self.mgr.addRefund(Refund(self.bob, 500, self.alice))
+        self.mgr.addRefund(Refund(datetime(2010, 3, 16, 21, 0, 0), self.bob, 500, self.alice))
         result = self.mgr.computeDebts()
         expected = ((self.bob, 2000, self.alice),)
         self.assertEqual(result, expected)
-
 
     def test_items_equality(self):
         item1 = Item((Person("alice"), Person("bob"),),  "abcd", 15)

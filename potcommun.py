@@ -68,7 +68,6 @@ class DebtManager(object):
     def __init__(self):
         self.persons = set()
         self.outlays = set()
-        self.refunds = set()
 
     def addPersons(self, persons):
         if type(persons) in (type(""), type(u"")):
@@ -90,7 +89,7 @@ class DebtManager(object):
         return outlay
 
     def addRefund(self, refund):
-        self.refunds.add(refund)
+        self.outlays.add(refund)
         return refund
 
     @staticmethod
@@ -152,10 +151,6 @@ class DebtManager(object):
         result = {}
         for name in totals[0].keys():
             result[name] = totals[0][name] - totals[1][name]
-            
-        for refund in self.refunds:
-            result[refund.debitPerson] -= refund.amount
-            result[refund.creditPerson] += refund.amount
             
         return result
 
@@ -309,10 +304,9 @@ class DebtManager(object):
 
         
 
-class Outlay(object):
-    def __init__(self, date, label):
+class Transaction(object):
+    def __init__(self, date):
         self.date = date
-        self.label = label
         self.items = set()
         self.payments = set()
         self.persons = set()
@@ -332,6 +326,34 @@ class Outlay(object):
 
     def getId(self):
         return id(self)
+
+
+class Outlay(Transaction):
+    def __init__(self, date, label):
+        Transaction.__init__(self, date)
+        self.label = label
+  
+
+class Refund(Transaction):
+    """
+        A direct refund, maybe partial.
+    """
+    def __init__(self, date, debitPerson, amount, creditPerson):
+        from datetime import datetime
+        Transaction.__init__(self, date)
+        self.label = "Refund to %s" % str(creditPerson)
+        
+        item = Item((creditPerson, ), "Refund from %s" % debitPerson, amount)
+        payment = Payment((debitPerson, ), amount)
+        
+        self.addItem(item)
+        self.addPayment(payment)
+        
+        self.debitPerson = debitPerson
+        self.amount = amount
+        self.creditPerson = creditPerson
+
+
 
 class AbstractPayment(object):
     def __init__(self, persons, amount):
@@ -426,17 +448,6 @@ class Handler(object):
 
     def purge(self):
         pass
-
-class Refund(object):
-    """
-        A direct refund, maybe partial.
-    """
-    def __init__(self, debitPerson, amount, creditPerson):
-        self.debitPerson = debitPerson
-        self.amount = amount
-        self.creditPerson = creditPerson
-
-
 
 
 
