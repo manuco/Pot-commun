@@ -54,12 +54,12 @@ class DebtManager(object):
         The Python way :
         >>> from potcommun import DebtManager
         >>> mgr = DebtManager()
-        >>> o1=mgr.addOutlay(None, "Restaurant")  # None is a placeholder for a date
+        >>> o1=mgr.addTransaction(Outlay(None, "Restaurant"))  # None is a placeholder for a date
         >>> o1.addItem(("A", "B"), "meal A & B", 25)
         >>> o1.addItem(("C",), "meal C", 15)
         >>> o1.addItem(("B","C",), "wine B & C", 20)
         >>> o1.addPayment(("B",), 60)
-        >>> o2=mgr.addOutlay(None, "Cinema")
+        >>> o2=mgr.addTransaction(Outlay(None, "Cinema"))
         >>> o2.addPersons(("A", "B"))  # No details about items : auto-adjustment will be done
         >>> o2.addPayment(("A",), 18)
         >>> mgr.computeDebts()
@@ -70,8 +70,7 @@ class DebtManager(object):
     def __init__(self, name="unnamed"):
         self.name = name
         self.persons = set()
-        self.outlays = set()
-        self.refunds = set()
+        self.transactions = set()
 
     def addPersons(self, persons):
         if type(persons) in (type(""), type(u"")):
@@ -83,17 +82,17 @@ class DebtManager(object):
             if name == person.name:
                 return person
 
-    def addOutlay(self, outlay):
+    def addTransaction(self, transaction):
         """
             Return the outlay.
         """
-        outlay.mgr = self
-        self.outlays.add(outlay)
-        self.addPersons(outlay.persons)
-        return outlay
+        transaction.mgr = self
+        self.transactions.add(transaction)
+        self.addPersons(transaction.persons)
+        return transaction
 
     def addRefund(self, refund):
-        self.refunds.add(refund)
+        self.transactions.add(refund)
         return refund
 
     @staticmethod
@@ -140,12 +139,12 @@ class DebtManager(object):
     def computeTotals(self):
         itemsTotals = {}
         paymentTotals = {}
-        for outlay in self.outlays:
-            perOutlayItemsTotals = AbstractPayment.computeTotals(outlay.items)
-            perOutlayPaymentsTotals = AbstractPayment.computeTotals(outlay.payments)
-            perOutlayItemsTotals, perOutlayPaymentsTotals = self.checkAndAdjustTotals(outlay.persons, perOutlayItemsTotals, perOutlayPaymentsTotals)
-            itemsTotals = Item.mergeTotals(itemsTotals, perOutlayItemsTotals)
-            paymentTotals = Payment.mergeTotals(paymentTotals, perOutlayPaymentsTotals)
+        for transaction in self.transactions:
+            perTransactionItemsTotals = AbstractPayment.computeTotals(transaction.items)
+            perTransactionPaymentsTotals = AbstractPayment.computeTotals(transaction.payments)
+            perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(transaction.persons, perTransactionItemsTotals, perTransactionPaymentsTotals)
+            itemsTotals = Item.mergeTotals(itemsTotals, perTransactionItemsTotals)
+            paymentTotals = Payment.mergeTotals(paymentTotals, perTransactionPaymentsTotals)
 
 
         return itemsTotals, paymentTotals
@@ -155,10 +154,6 @@ class DebtManager(object):
         result = {}
         for name in totals[0].keys():
             result[name] = totals[0][name] - totals[1][name]
-            
-        for refund in self.refunds:
-            result[refund.debitPerson] -= refund.amount
-            result[refund.creditPerson] += refund.amount
             
         return result
 
@@ -207,13 +202,13 @@ class DebtManager(object):
         result = {}
         for person in self.persons:
             resultForPerson = {}
-            for outlay in self.outlays:
-                if person not in outlay.persons:
+            for transaction in self.transactions:
+                if person not in transaction.persons:
                     continue
                 items = set()
 
                 amount = 0
-                elems = outlay.payments if isPayment else outlay.items
+                elems = transaction.payments if isPayment else transaction.items
                 for elem in elems:
                     amounts = elem.computeAmountPerPerson()
                     try:
@@ -225,22 +220,22 @@ class DebtManager(object):
                     except KeyError:
                         pass
 
-                perOutlayItemsTotals = AbstractPayment.computeTotals(outlay.items)
-                perOutlayPaymentsTotals = AbstractPayment.computeTotals(outlay.payments)
-                perOutlayItemsTotals, perOutlayPaymentsTotals = self.checkAndAdjustTotals(outlay.persons, perOutlayItemsTotals, perOutlayPaymentsTotals)
+                perTransactionItemsTotals = AbstractPayment.computeTotals(transaction.items)
+                perTransactionPaymentsTotals = AbstractPayment.computeTotals(transaction.payments)
+                perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(transaction.persons, perTransactionItemsTotals, perTransactionPaymentsTotals)
 
                 if isPayment:
-                    if amount < perOutlayPaymentsTotals[person]:
-                        items.add(perOutlayPaymentsTotals[person] - amount)
+                    if amount < perTransactionPaymentsTotals[person]:
+                        items.add(perTransactionPaymentsTotals[person] - amount)
                 else:
-                    if amount < perOutlayItemsTotals[person]:
-                        items.add(("(1 / %d)" % len(outlay.persons), perOutlayItemsTotals[person] - amount))
+                    if amount < perTransactionItemsTotals[person]:
+                        items.add(("(1 / %d)" % len(transaction.persons), perTransactionItemsTotals[person] - amount))
 
-                total = sum(perOutlayItemsTotals.values())
-                total2 = sum(perOutlayPaymentsTotals.values())
+                total = sum(perTransactionItemsTotals.values())
+                total2 = sum(perTransactionPaymentsTotals.values())
                 assert total == total2
                 if len(items) > 0:
-                    resultForPerson[(outlay.date, outlay.label, total)] = items
+                    resultForPerson[(transaction.date, transaction.label, total)] = items
             if len(resultForPerson.keys()) > 0:
                 result[person] = resultForPerson
         return result
@@ -312,10 +307,9 @@ class DebtManager(object):
 
         
 
-class Outlay(object):
-    def __init__(self, date, label):
+class Transaction(object):
+    def __init__(self, date):
         self.date = date
-        self.label = label
         self.items = set()
         self.payments = set()
         self.persons = set()
@@ -335,6 +329,41 @@ class Outlay(object):
 
     def getId(self):
         return id(self)
+
+    def getItem(self, *args, **kwargs):
+        return Item(*args, **kwargs)
+
+    def getPayment(self, *args, **kwargs):
+        return Payment(*args, **kwargs)
+
+class Outlay(Transaction):
+    def __init__(self, date, label):
+        Transaction.__init__(self, date)
+        self.label = label
+  
+
+class Refund(Transaction):
+    """
+        A direct refund, maybe partial.
+    """
+    def __init__(self, date, debitPerson, amount, creditPerson):
+        from datetime import datetime
+        Transaction.__init__(self, date)
+        
+        item = self.getItem((creditPerson, ), "Refund from %s" % debitPerson, amount)
+        payment = self.getPayment((debitPerson, ), amount)
+        
+        self.addItem(item)
+        self.addPayment(payment)
+        
+        self.debitPerson = debitPerson
+        self.amount = amount
+        self.creditPerson = creditPerson
+
+    def getLabel(self):
+        return "Refund to %s" % str(self.creditPerson)
+
+    label = property(getLabel)
 
 class AbstractPayment(object):
     def __init__(self, persons, amount):
@@ -429,17 +458,6 @@ class Handler(object):
 
     def purge(self):
         pass
-
-class Refund(object):
-    """
-        A direct refund, maybe partial.
-    """
-    def __init__(self, debitPerson, amount, creditPerson):
-        self.debitPerson = debitPerson
-        self.amount = amount
-        self.creditPerson = creditPerson
-
-
 
 
 
