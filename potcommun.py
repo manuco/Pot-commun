@@ -346,7 +346,6 @@ class Refund(Transaction):
     def __init__(self, date, debitPerson, amount, creditPerson):
         from datetime import datetime
         Transaction.__init__(self, date)
-        self.label = "Refund to %s" % str(creditPerson)
         
         item = self.getItem((creditPerson, ), "Refund from %s" % debitPerson, amount)
         payment = self.getPayment((debitPerson, ), amount)
@@ -358,7 +357,10 @@ class Refund(Transaction):
         self.amount = amount
         self.creditPerson = creditPerson
 
+    def getLabel(self):
+        return "Refund to %s" % str(self.creditPerson)
 
+    label = property(getLabel)
 
 class AbstractPayment(object):
     def __init__(self, persons, amount):
