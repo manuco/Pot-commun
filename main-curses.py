@@ -14,6 +14,8 @@ import sqlstorage
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
+ENCODING = "utf-8"
+
 ## Tip : export ESCDELAY var to reduce time to interpret escape key (10 is fine)
 
 class BaseForm(object):
@@ -83,10 +85,10 @@ class BaseForm(object):
         height = 3
         self.drawBox(y, x, height, width, WHITE)
         x = mx // 2 - len(title) // 2
-        self.win.addstr(1, x, title, WHITE)
+        self.win.addstr(1, x, title.encode(ENCODING), WHITE)
 
     def drawStr(self, label, color=None):
-        self.win.addstr(0, 0, label, color if color is not None else WHITE)
+        self.win.addstr(0, 0, label.encode(ENCODING), color if color is not None else WHITE)
 
 class Label(BaseForm):
     def __init__(self, height, width):
@@ -100,7 +102,7 @@ class Label(BaseForm):
         self.color = WHITE if color is None else color
 
     def draw(self):
-        self.win.addstr(0, 0, self.text, self.color)
+        self.win.addstr(0, 0, self.text.encode(ENCODING), self.color)
 
     def getSubwinParams(self, y, win):
         return self.height, self.width, y, 2
@@ -159,7 +161,7 @@ class BaseMenu(BaseForm):
         for i, item in enumerate(items):
             label = " " + item[0][:maxlen]
             label += " " * (maxlen - len(label))
-            self.win.addstr(1 + i, 6, label, color | c.A_REVERSE if i == selectedRow else 0)
+            self.win.addstr(1 + i, 6, label.encode(ENCODING), color | c.A_REVERSE if i == selectedRow else 0)
 
 class Splitter(BaseForm):
     def __init__(self):
@@ -313,11 +315,11 @@ class InputField(BaseForm):
 class WelcomeForm(BaseForm):
     def draw(self):
         BaseForm.draw(self)
-        title = "Bienvenue ! Appuyez sur Entrée pour commencer."
+        title = u"Bienvenue ! Appuyez sur Entrée pour commencer."
         my, mx = self.win.getmaxyx()
         x = mx // 2 - len(title) // 2
         y = my // 2
-        self.win.addstr(y, x, title, YELLOW | c.A_BOLD)
+        self.win.addstr(y, x, title.encode(ENCODING), YELLOW | c.A_BOLD)
 
     def onInput(self, ch, key):
         if ch == 27 or key in ('q', 'Q'):
@@ -334,8 +336,9 @@ class DebtManagerForm(BaseForm):
         self.onFocus()        
                 
     def getOutlays(self):
-        r = [(o.label.encode("utf-8"), o) for o in self.dm.outlays]
-        r.append(("Nouvelle dépense...", None))
+        r = [(o.label, o) for o in self.dm.transactions]
+        r.append((u"Nouvelle dépense...", "new_outlay"))
+        r.append((u"Nouveau remboursement...", "new_refund"))
         return r
         
     def layout(self, win):
@@ -344,13 +347,13 @@ class DebtManagerForm(BaseForm):
        
     def draw(self):
         BaseForm.draw(self)
-        self.drawTitle("Pot commun : %s" % self.dm.name.encode("utf-8"), WHITE)
+        self.drawTitle(u"Pot commun : %s" % self.dm.name, WHITE)
         self.menu.draw()
         
     def onInput(self, ch, key):
         action = self.menu.onInput(ch, key)
         if action == "DELETE":
-            self.dm.outlays.remove(self.menu.getSelectedItem())
+            self.dm.transactions.remove(self.menu.getSelectedItem())
             db = getDB()
             db.saveDebtManager(self.dm)
 
@@ -359,7 +362,7 @@ class DebtManagerForm(BaseForm):
             return self
         elif action == "ACCEPT":
             outlay = self.menu.getSelectedItem()
-            if outlay is None:
+            if outlay is "new_outlay":
                 outlay = sqlstorage.Outlay(datetime.datetime.now(), "")
                 return OutlayEditForm(self.dm, outlay)
             return OutlayManagementForm(self.dm, outlay)
@@ -388,7 +391,7 @@ class DebtManagerSelection(BaseForm):
 
     def draw(self):
         BaseForm.draw(self)
-        self.drawTitle("Sélection du pot commun", WHITE)
+        self.drawTitle(u"Sélection du pot commun", WHITE)
         if self.dms is None:
             self.dms = self.getDMs()
         self.menu.draw()
@@ -417,9 +420,9 @@ class DebtManagerSelection(BaseForm):
     def getDMs(self):
         db = getDB()
         
-        r = [(dm.name.encode("utf-8"), dm) for dm in db.getManagers()]
+        r = [(dm.name, dm) for dm in db.getManagers()]
         r.append(
-            ("Nouveau pot commun...", None),
+            (u"Nouveau pot commun...", None),
         )
 
         return r
@@ -440,7 +443,7 @@ class NewDebtManagerForm(BaseForm):
         self.inputField.layout(win.derwin(*InputField.getSubwinParams(5, win)))
 
     def draw(self):
-        self.drawTitle("Nouveau pot commun", WHITE)
+        self.drawTitle(u"Nouveau pot commun", WHITE)
         self.inputField.draw()
 
     def onInput(self, ch, key):
@@ -475,7 +478,7 @@ class OutlayEditForm(BaseForm):
         self.stack.layout(self.workspace)
 
     def draw(self):
-        self.drawTitle("Édition d'une dépense", WHITE)
+        self.drawTitle(u"Édition d'une dépense", WHITE)
         self.stack.draw()
         
     def onInput(self, ch, key):
@@ -486,13 +489,13 @@ class OutlayEditForm(BaseForm):
                 self.outlay.label = self.nameField.getUserInput()
                 self.outlay.date = datetime.datetime.strptime(self.dateField.getUserInput(), "%Y-%m-%d %H:%M:%S")
                 self.dateField.getUserInput()
-                if self.outlay not in self.dm.outlays:
-                    self.dm.outlays.add(self.outlay)
+                if self.outlay not in self.dm.transactions:
+                    self.dm.transactions.add(self.outlay)
                 db = getDB()
                 db.saveDebtManager(self.dm)
                 return 1
             except Exception, e:
-                self.errorMsg.setText(e.args[0].decode("utf-8"), RED)
+                self.errorMsg.setText(e.args[0].decode(ENCODING), RED)
                 self.stack.resetFocus()
                 return self                
             
@@ -538,7 +541,7 @@ class PotCommunCursesApplication(object):
     def drawAppTitle(self, win, title):
         my, mx = win.getmaxyx()
         x = mx // 2 - len(title) // 2
-        win.addstr(0, x, title, WHITE | c.A_BOLD)
+        win.addstr(0, x, title.encode(ENCODING), WHITE | c.A_BOLD)
         for n in range(mx):
             win.addch(1, n, curses.ACS_HLINE, CYAN)
         my, mx = win.getmaxyx()
@@ -546,7 +549,7 @@ class PotCommunCursesApplication(object):
 
     def draw(self, resized):
         self.mainWindow.erase()
-        self.drawAppTitle(self.mainWindow, "Pot Commun V %s" % potcommun.__version__)
+        self.drawAppTitle(self.mainWindow, u"Pot Commun V %s" % potcommun.__version__)
 
         if resized:
             del self.workspace
