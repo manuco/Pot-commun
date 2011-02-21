@@ -50,6 +50,13 @@ class Transaction(potcommun.Transaction, Base):
         'polymorphic_on': classType,
     }
 
+    def getItem(self, *args, **kwargs):
+        return Item(*args, **kwargs)
+
+    def getPayment(self, *args, **kwargs):
+        return Payment(*args, **kwargs)
+
+
 class Outlay(potcommun.Outlay, Transaction):
     __tablename__ = "Outlays"
     oid = Column(Integer, ForeignKey("Transactions.oid"), primary_key=True)
@@ -69,7 +76,6 @@ class Refund(potcommun.Refund, Transaction):
     __mapper_args__ = {
         'polymorphic_identity': 'refund',
     }
-
 
 class AbstractPayment(potcommun.AbstractPayment, Base):
 
