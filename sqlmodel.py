@@ -19,9 +19,9 @@ persons_payments = Table('persons_payments', metadata,
     Column('payments_oid', Integer, ForeignKey('AbstractPayments.oid')),
 )
 
-persons_outlays = Table('persons_outlays', metadata,
+persons_transactions = Table('persons_transactions', metadata,
     Column('person_oid', Integer, ForeignKey('Persons.name')),
-    Column('outlay_oid', Integer, ForeignKey('Outlays.oid')),
+    Column('transactions_oid', Integer, ForeignKey('Transactions.oid')),
 )
 
 class Person(potcommun.Person, Base):
@@ -33,27 +33,42 @@ class DebtManager(potcommun.DebtManager, Base):
     oid = Column(Integer, primary_key=True)
     name = Column(String)
     persons = relationship(Person, secondary=dmgr_persons, collection_class=set)
-    outlays = relationship("Outlay", collection_class=set)
-    refunds = relationship("Refund", collection_class=set)
+    transactions = relationship("Transaction", collection_class=set) # String is a class name, not a table one.
 
-class Outlay(potcommun.Outlay, Base):
-    __tablename__ = "Outlays"
+class Transaction(potcommun.Transaction, Base):
+    __tablename__ = "Transactions"
     oid = Column(Integer, primary_key=True)
     mgr = Column(Integer, ForeignKey("DebtManagers.oid")) ## Reverse
+    classType = Column(String, nullable=False) ## Inheritance
+    
     date = Column(Date)
-    label = Column(String)
     items = relationship("Item", collection_class=set)
     payments = relationship("Payment", collection_class=set)
-    persons = relationship(Person, secondary=persons_outlays, collection_class=set)
+    persons = relationship(Person, secondary=persons_transactions, collection_class=set)
 
-class Refund(potcommun.Refund, Base):
+    __mapper_args__ = {
+        'polymorphic_on': classType,
+    }
+
+class Outlay(potcommun.Outlay, Transaction):
+    __tablename__ = "Outlays"
+    oid = Column(Integer, ForeignKey("Transactions.oid"), primary_key=True)
+    
+    label = Column(String)
+    __mapper_args__ = {
+        'polymorphic_identity': 'outlay',
+    }
+
+class Refund(potcommun.Refund, Transaction):
     __tablename__ = "Refunds"
-    oid = Column(Integer, primary_key=True)
-    mgr = Column(Integer, ForeignKey("DebtManagers.oid")) ## Reverse
+    oid = Column(Integer, ForeignKey("Transactions.oid"), primary_key=True)
+
     debitPerson = Column(Integer, ForeignKey("Persons.name"))
     creditPerson = Column(Integer, ForeignKey("Persons.name"))
-    amount = Column(Integer)
 
+    __mapper_args__ = {
+        'polymorphic_identity': 'refund',
+    }
 
 
 class AbstractPayment(potcommun.AbstractPayment, Base):
@@ -61,7 +76,7 @@ class AbstractPayment(potcommun.AbstractPayment, Base):
     oid = Column(Integer, primary_key=True)
     classType = Column(String, nullable=False)
     amount = Column(Integer)
-    outlay = Column(Integer, ForeignKey("Outlays.oid"))
+    transaction = Column(Integer, ForeignKey("Transactions.oid"))
     persons = relationship(Person, secondary=persons_payments, collection_class=set)
 
     __tablename__ = "AbstractPayments"

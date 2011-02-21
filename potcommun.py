@@ -52,12 +52,12 @@ class DebtManager(object):
         The Python way :
         >>> from potcommun import DebtManager
         >>> mgr = DebtManager()
-        >>> o1=mgr.addOutlay(None, "Restaurant")  # None is a placeholder for a date
+        >>> o1=mgr.addTransaction(Outlay(None, "Restaurant"))  # None is a placeholder for a date
         >>> o1.addItem(("A", "B"), "meal A & B", 25)
         >>> o1.addItem(("C",), "meal C", 15)
         >>> o1.addItem(("B","C",), "wine B & C", 20)
         >>> o1.addPayment(("B",), 60)
-        >>> o2=mgr.addOutlay(None, "Cinema")
+        >>> o2=mgr.addTransaction(Outlay(None, "Cinema"))
         >>> o2.addPersons(("A", "B"))  # No details about items : auto-adjustment will be done
         >>> o2.addPayment(("A",), 18)
         >>> mgr.computeDebts()
@@ -68,34 +68,29 @@ class DebtManager(object):
     def __init__(self, name="unnamed"):
         self.name = name
         self.persons = set()
-        self.outlays = set()
-        self.refunds = set()
+        self.transactions = set()
 
-    def addPerson(self, p):
-        if type(p) in (type(""), type(u"")):
-            raise ValueError("Person should not be a string.")
-
-        if  p not in self.persons:
-            self.persons.add(p)
-        else:
-            raise ValueError("Already registered")
-        return p
+    def addPersons(self, persons):
+        if type(persons) in (type(""), type(u"")):
+            raise ValueError("persons must be a non string iterable")
+        self.persons.update(persons)
 
     def getPerson(self, name):
         for person in self.persons:
             if name == person.name:
                 return person
 
-    def addOutlay(self, outlay):
+    def addTransaction(self, transaction):
         """
             Return the outlay.
         """
-        outlay.mgr = self
-        self.outlays.add(outlay)
-        return outlay
+        transaction.mgr = self
+        self.transactions.add(transaction)
+        self.addPersons(transaction.persons)
+        return transaction
 
     def addRefund(self, refund):
-        self.refunds.add(refund)
+        self.transactions.add(refund)
         return refund
 
     @staticmethod
@@ -142,12 +137,12 @@ class DebtManager(object):
     def computeTotals(self):
         itemsTotals = {}
         paymentTotals = {}
-        for outlay in self.outlays:
-            perOutlayItemsTotals = AbstractPayment.computeTotals(outlay.items)
-            perOutlayPaymentsTotals = AbstractPayment.computeTotals(outlay.payments)
-            perOutlayItemsTotals, perOutlayPaymentsTotals = self.checkAndAdjustTotals(outlay.persons, perOutlayItemsTotals, perOutlayPaymentsTotals)
-            itemsTotals = Item.mergeTotals(itemsTotals, perOutlayItemsTotals)
-            paymentTotals = Payment.mergeTotals(paymentTotals, perOutlayPaymentsTotals)
+        for transaction in self.transactions:
+            perTransactionItemsTotals = AbstractPayment.computeTotals(transaction.items)
+            perTransactionPaymentsTotals = AbstractPayment.computeTotals(transaction.payments)
+            perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(transaction.persons, perTransactionItemsTotals, perTransactionPaymentsTotals)
+            itemsTotals = Item.mergeTotals(itemsTotals, perTransactionItemsTotals)
+            paymentTotals = Payment.mergeTotals(paymentTotals, perTransactionPaymentsTotals)
 
 
         return itemsTotals, paymentTotals
@@ -157,10 +152,6 @@ class DebtManager(object):
         result = {}
         for name in totals[0].keys():
             result[name] = totals[0][name] - totals[1][name]
-            
-        for refund in self.refunds:
-            result[refund.debitPerson] -= refund.amount
-            result[refund.creditPerson] += refund.amount
             
         return result
 
@@ -198,10 +189,125 @@ class DebtManager(object):
             raise RuntimeError("Wrong balances!")
         return tuple(debts)
 
-class Outlay(object):
-    def __init__(self, date, label):
+    def getItemsPerPerson(self):
+        return self.getPaymentsOrItemsPerPerson(isPayment=False)
+
+    def getPaymentsPerPerson(self):
+        return self.getPaymentsOrItemsPerPerson(isPayment=True)
+
+
+    def getPaymentsOrItemsPerPerson(self, isPayment):
+        result = {}
+        for person in self.persons:
+            resultForPerson = {}
+            for transaction in self.transactions:
+                if person not in transaction.persons:
+                    continue
+                items = set()
+
+                amount = 0
+                elems = transaction.payments if isPayment else transaction.items
+                for elem in elems:
+                    amounts = elem.computeAmountPerPerson()
+                    try:
+                        if isPayment:
+                            items.add(amounts[person])
+                        else:
+                            items.add((elem.label, amounts[person]))
+                        amount += amounts[person]
+                    except KeyError:
+                        pass
+
+                perTransactionItemsTotals = AbstractPayment.computeTotals(transaction.items)
+                perTransactionPaymentsTotals = AbstractPayment.computeTotals(transaction.payments)
+                perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(transaction.persons, perTransactionItemsTotals, perTransactionPaymentsTotals)
+
+                if isPayment:
+                    if amount < perTransactionPaymentsTotals[person]:
+                        items.add(perTransactionPaymentsTotals[person] - amount)
+                else:
+                    if amount < perTransactionItemsTotals[person]:
+                        items.add(("(1 / %d)" % len(transaction.persons), perTransactionItemsTotals[person] - amount))
+
+                total = sum(perTransactionItemsTotals.values())
+                total2 = sum(perTransactionPaymentsTotals.values())
+                assert total == total2
+                if len(items) > 0:
+                    resultForPerson[(transaction.date, transaction.label, total)] = items
+            if len(resultForPerson.keys()) > 0:
+                result[person] = resultForPerson
+        return result
+
+
+    def printItems(self, items):
+        print " --- Dépenses ---\n"
+        datesAndlabels = items.keys()
+        datesAndlabels.sort()
+        maxLabelLen = 0
+        for dl in datesAndlabels:
+            maxLabelLen = max(maxLabelLen, *map(len, [d[0] for d in items[dl]]))
+
+        gdTotal = 0
+        for dl in datesAndlabels:
+            print dl[0], "-", dl[1], "(%s)" % format(dl[2] / 100, ".2f")
+            total = 0
+            for item in items[dl]:
+                print " -", item[0] + " " * (maxLabelLen - len(item[0])), format(item[1] / 100, " >8.2f")
+                total += item[1]
+            gdTotal += total
+            print " =", "Total" + " " * (maxLabelLen - 5), format(total / 100, " >8.2f")
+            print
+
+        print "Total" + " " * (maxLabelLen - 2), format(gdTotal / 100, " >8.2f"), "\n"
+        return gdTotal
+
+    def printPayments(self, payments):
+        print " +++ Paiements +++\n"
+        datesAndlabels = payments.keys()
+        datesAndlabels.sort()
+
+        gdTotal = 0
+        for dl in datesAndlabels:
+            print dl[0], "-", dl[1], " :", ", ".join([format(elem / 100, ".2f") for elem in payments[dl]]) + (" = " + format(sum(payments[dl]) / 100, ".2f") if len(payments[dl]) > 1 else "")
+            gdTotal += sum(payments[dl])
+        
+        print "\nTotal   ", format(gdTotal / 100, " >8.2f"), "\n"
+        return gdTotal
+
+
+    def printReport(self):
+        print
+        allItems = self.getItemsPerPerson()
+        allPayments = self.getPaymentsPerPerson()
+
+
+        persons = list(self.persons)
+        persons.sort()
+        for person in persons:
+            print person.name
+            print "=" * len(person.name) + "\n"
+            solde = 0
+            try:
+                solde = -self.printItems(allItems[person])
+            except KeyError:
+                print "Pas de dépense"
+            try:
+                solde += self.printPayments(allPayments[person])
+            except KeyError:
+                print "Pas de paiement"
+
+            print "Solde :", format(solde / 100, ".2f")
+            print
+        
+        print
+        for a, s, b in self.computeDebts():
+            print a, "doit", format(s / 100, ".2f"), "à", b
+
+        
+
+class Transaction(object):
+    def __init__(self, date):
         self.date = date
-        self.label = label
         self.items = set()
         self.payments = set()
         self.persons = set()
@@ -222,6 +328,34 @@ class Outlay(object):
     def getId(self):
         return id(self)
 
+
+class Outlay(Transaction):
+    def __init__(self, date, label):
+        Transaction.__init__(self, date)
+        self.label = label
+  
+
+class Refund(Transaction):
+    """
+        A direct refund, maybe partial.
+    """
+    def __init__(self, date, debitPerson, amount, creditPerson):
+        from datetime import datetime
+        Transaction.__init__(self, date)
+        self.label = "Refund to %s" % str(creditPerson)
+        
+        item = Item((creditPerson, ), "Refund from %s" % debitPerson, amount)
+        payment = Payment((debitPerson, ), amount)
+        
+        self.addItem(item)
+        self.addPayment(payment)
+        
+        self.debitPerson = debitPerson
+        self.amount = amount
+        self.creditPerson = creditPerson
+
+
+
 class AbstractPayment(object):
     def __init__(self, persons, amount):
         for person in persons:
@@ -235,11 +369,7 @@ class AbstractPayment(object):
     def computeTotals(payments):
         results = {}
         for payment in payments:
-            divisor = len(payment.persons)
-            roundingError = payment.amount - ((payment.amount // divisor) * divisor)
-            for person in payment.persons:
-                amount = payment.amount // divisor + (1 if roundingError > 0 else 0)
-                roundingError -= 1
+            for person, amount in payment.computeAmountPerPerson().items():
                 if person in results.keys():
                     results[person] += amount
                 else:
@@ -255,6 +385,22 @@ class AbstractPayment(object):
                 totalsA[name] = amount
         return totalsA
 
+    def computeAmountPerPerson(self):
+        results = {}
+        divisor = len(self.persons)
+        roundingError = self.amount - ((self.amount // divisor) * divisor)
+        for person in self.persons:
+            amount = self.amount // divisor + (1 if roundingError > 0 else 0)
+            roundingError -= 1
+            results[person] = amount
+        return results
+
+
+    def __eq__(self, other):
+        if self.amount != other.amount:
+            return False
+        return self.persons == other.persons
+
 class Payment(AbstractPayment):
     pass
 
@@ -262,6 +408,12 @@ class Item(AbstractPayment):
     def __init__(self, persons, label, amount):
         AbstractPayment.__init__(self, persons, amount)
         self.label = label
+
+    def __eq__(self, other):
+        if self.label != other.label:
+            return False
+
+        return AbstractPayment.__eq__(self, other)
 
 class Person(object):
     def __init__(self, name):
@@ -297,17 +449,6 @@ class Handler(object):
 
     def purge(self):
         pass
-
-class Refund(object):
-    """
-        A direct refund, maybe partial.
-    """
-    def __init__(self, debitPerson, amount, creditPerson):
-        self.debitPerson = debitPerson
-        self.amount = amount
-        self.creditPerson = creditPerson        
-
-
 
 
 
