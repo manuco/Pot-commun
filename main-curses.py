@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import  division
 
+import re
+
 import curses
 import curses as c
 import curses.wrapper
@@ -22,6 +24,8 @@ print >>sys.stderr, "\n" * 10
 
 ## Tip : export ESCDELAY var to reduce time to interpret escape key (10 is fine)
 
+def getAmountAsString(amount):
+    return u"%d,%02d €" % (amount // 100, amount % 100)
 
 class WelcomeForm(BaseForm):
     def draw(self):
@@ -165,6 +169,7 @@ class OutlayEditForm(BaseForm):
         self.nameField = InputField(u"Nom : ", outlay.label)
         self.dateField = InputField(u"Date : ", unicode(outlay.date.strftime("%Y-%m-%d %H:%M:%S")))
         self.errorMsg = Label(1, 90)
+        self.errorString = ""
         self.stack.add(self.nameField)
         self.stack.add(self.dateField)
         self.stack.add(self.errorMsg)
@@ -180,22 +185,22 @@ class OutlayEditForm(BaseForm):
         self.stack.draw()
         
     def onInput(self, ch, key):
-        self.errorMsg.setText(u"")
+        self.errorMsg.setText(self.errorString, WHITE)
         action = self.stack.onInput(ch, key)
         if action == "ACCEPT":
             try:
                 self.outlay.label = self.nameField.getUserInput()
                 self.outlay.date = datetime.datetime.strptime(self.dateField.getUserInput(), "%Y-%m-%d %H:%M:%S")
-                self.dateField.getUserInput()
                 if self.outlay not in self.dm.transactions:
                     self.dm.transactions.add(self.outlay)
                 db = getDB()
                 db.saveDebtManager(self.dm)
                 return 1
             except Exception, e:
-                self.errorMsg.setText(e.args[0].decode(ENCODING), RED)
-                self.stack.resetFocus()
-                return self
+                self.errorString = e.args[0].decode(ENCODING)
+                self.errorMsg.setText(self.errorString, RED | curses.A_BOLD)
+                self.stack.onFocus()
+                return "OK"
 
         elif action == "FOCUS_NEXT":
             self.stack.onFocus()
@@ -212,11 +217,11 @@ class OutlayItemsManagementForm(Widget):
         Left pane of the outlay
     """
 
-    def __init__(self, outlay):
+    def __init__(self, dm, outlay):
+        self.dm = dm
         self.outlay = outlay
         self.menu = BaseMenu()
         self.onFocus()
-        
 
     def layout(self, win):
         Widget.layout(self, win)
@@ -232,16 +237,17 @@ class OutlayItemsManagementForm(Widget):
 
     def onInput(self, ch, key):
         action = self.menu.onInput(ch, key)
-
-        #elif key == "KEY_RETURN":
-            #dm = sqlstorage.DebtManager(self.inputField.getUserInput())
-            #db = getDB()
-            #db.saveDebtManager(dm)
-            #return 1
-        #elif key == "KEY_ESCAPE":
-            #return 1
-        return None
-
+        item = self.menu.getSelectedItem()
+        if action == "ACCEPT":
+            if item == "new_item":
+                item = sqlstorage.Item(set(), u"", 0)
+            return ItemEditForm(self.dm, self.outlay, item)
+        elif action == "DELETE":
+            self.outlay.items.remove(item)
+            db = getDB()
+            db.saveDebtManager(self.dm)
+            self.onFocus()
+            return "OK"
 
     def getItems(self):
         items = [
@@ -249,8 +255,90 @@ class OutlayItemsManagementForm(Widget):
             (u"Nouveau paiment...", "new_payment"),
         ]
 
-        items.extend([(i.label, i) for i in self.outlay.items])
+        items.extend([(u"%s (%s)" % (i.label, getAmountAsString(i.amount)), i) for i in self.outlay.items])
+
+        #import sys
+        #print >>sys.stderr, items
+
         return items
+
+
+class PersonChooserField(Widget):
+    pass
+
+class ItemEditForm(BaseForm):
+    def __init__(self, dm, outlay, item):
+        self.outlay = outlay
+        self.dm = dm
+        self.item = item
+
+        self.labelField = InputField(u"Intitulé : ", item.label)
+        self.amountField = InputField(u"Montant : ", getAmountAsString(item.amount) if item.amount != 0 else u"")
+        self.personsField = PersonChooserField(u"Qui ? ", item.label)
+        #self.personsField = Label(1, 30)
+        #self.personsField.setText(u"PersonChooserField à écrire !")
+        self.errorField = Label(1, 90)
+        self.errorString = u""
+
+        self.fields = StackedFields()
+        self.fields.add(self.labelField)
+        self.fields.add(self.amountField)
+        self.fields.add(self.errorField)
+        self.fields.add(self.personsField)
+
+    def layout(self, win):
+        Widget.layout(self, win)
+        self.fields.layout(win.derwin(0, 0))
+
+    def draw(self):
+        self.fields.draw()
+
+    def onInput(self, ch, key):
+        self.errorField.setText(self.errorString, WHITE)
+        action = self.fields.onInput(ch, key)
+        if action == "ACCEPT":
+            pass
+            try:
+                self.item.label = self.labelField.getUserInput()
+
+                amount = self.amountField.getUserInput().strip()
+                if len(amount) > 0:
+                    RE = ur"^ *(\d+)(?:[,.](\d{1,2}))?(?: *€? *)?$"
+                    result = re.findall(RE, amount)
+                    euros = result[0][0]
+                    cents = result[0][1]
+                    if len(cents) == 0:
+                        cents = 0
+
+                    amount = int(euros) * 100 + int(cents)
+                else:
+                    amount = 0
+                    
+                self.item.amount = amount
+
+                if self.item not in self.outlay.items:
+                    self.outlay.items.add(self.item)
+                db = getDB()
+                db.saveDebtManager(self.dm)
+                return 1
+            except IndexError:
+                self.errorString = u"Veuillez entrer un montant valide (15.55 par exemple)."
+                self.errorField.setText(self.errorString, RED | curses.A_BOLD)
+                self.fields.onFocus()
+            except Exception, e:
+                self.errorString = e.args[0].decode(ENCODING)
+                self.errorField.setText(self.errorString, RED | curses.A_BOLD)
+                self.fields.onFocus()
+        elif action == "CANCEL":
+            return 1
+        elif action == "FOCUS_NEXT":
+            self.fields.onFocus()
+        elif action == "FOCUS_PREVIOUS":
+            self.fields.onFocus(last=True)
+            
+        elif action is None:
+            return BaseForm.onInput(self, ch, key)
+        return "OK"
 
 
 class OutlayManagementForm(BaseForm):
@@ -258,10 +346,10 @@ class OutlayManagementForm(BaseForm):
         self.outlay = outlay
         self.dm = dm
 
-        self.leftPane = OutlayItemsManagementForm(self.outlay)
+        self.leftPane = OutlayItemsManagementForm(self.dm, self.outlay)
 
         self.splitter = Splitter()
-        self.splitter.addLeftPane(self.leftPane, u"Gestion des dépenses")
+        self.splitter.addLeftPane(self.leftPane, u"Dépenses : %s" % self.outlay.label)
 
     def layout(self, win):
         self.splitter.layout(win)
@@ -274,6 +362,9 @@ class OutlayManagementForm(BaseForm):
         if action is None:
             return BaseForm.onInput(self, ch, key)
         return action
+
+    def onFocus(self):
+        self.splitter.onFocus()
 
 class PotCommunCursesApplication(object):
 
@@ -342,6 +433,9 @@ class PotCommunCursesApplication(object):
                 try:
                     for i in range(action):
                         self.form = self.formStack.pop()
+                        #import sys
+                        #print >>sys.stderr, self.form
+
                         self.form.onFocus()
                         # force new layout
                         ch = curses.KEY_RESIZE

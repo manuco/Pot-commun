@@ -108,8 +108,6 @@ class Widget(object):
             To be implemented by any child
         """
         self.win = win
-        import sys
-        print >>sys.stderr, self, win
 
     def onFocus(self):
         """
@@ -159,7 +157,7 @@ class Label(Widget):
         self.color = WHITE
 
     def setText(self, text, color=None):
-        self.text = (text[:self.width]).encode("utf-8")
+        self.text = text[:self.width]
         self.color = WHITE if color is None else color
 
     def draw(self):
@@ -201,12 +199,14 @@ class BaseMenu(Widget):
         elif key == "KEY_RETURN":
             item = self.getSelectedItem()
 
-            if item is not None and item == self.itemToBeDeleted:
+            if item is not None and item is self.itemToBeDeleted:
                 return "DELETE"
             else:
                 return "ACCEPT"
         elif key == "KEY_DC":
-            self.itemToBeDeleted = self.getSelectedItem()
+            item = self.getSelectedItem()
+            if item is not None and type(item) != type(""):
+                self.itemToBeDeleted = item
         elif key == "KEY_TAB":
             return "FOCUS_NEXT"
         elif key == "KEY_BTAB":
@@ -223,7 +223,7 @@ class BaseMenu(Widget):
 
     def draw(self):
         if self.getSelectedItem() is self.itemToBeDeleted and self.itemToBeDeleted is not None:
-            color = RED | c.A_BOLD
+            color = RED
         else:
             color = WHITE
         self.drawMenu(self.items, self.selected, color)
@@ -300,6 +300,13 @@ class Splitter(Widget):
         else:
             return action
 
+    def onFocus(self):
+        if self.focusLeftPane:
+            self.leftPane.onFocus()
+        else:
+            self.rightPane.onFocus()
+
+
 class StackedFields(Widget):
 
     def __init__(self):
@@ -361,6 +368,7 @@ class StackedFields(Widget):
                 self.focusedFieldIndex += 1
             if self.focusedFieldIndex == len(self.fields):
                 return action
+            return "OK"
         elif action == "FOCUS_PREVIOUS":
             self.focusedFieldIndex -= 1
             while self.focusedFieldIndex > -1 and\
@@ -368,6 +376,9 @@ class StackedFields(Widget):
                 self.focusedFieldIndex -= 1
             if self.focusedFieldIndex < 0:
                 return "FOCUS_PREVIOUS"
+            else:
+                return "OK"
+        return action
 
 class InputField(Widget):
     focusable = True
