@@ -403,6 +403,8 @@ class AbstractPayment(object):
 
 
     def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return False
         if self.amount != other.amount:
             return False
         return self.persons == other.persons
@@ -416,10 +418,10 @@ class Item(AbstractPayment):
         self.label = label
 
     def __eq__(self, other):
-        if self.label != other.label:
+        if not AbstractPayment.__eq__(self, other):
             return False
 
-        return AbstractPayment.__eq__(self, other)
+        return self.label == other.label
 
 class Person(object):
     def __init__(self, name):
@@ -434,6 +436,8 @@ class Person(object):
         return hash(self.name)
 
     def __eq__(self, other):
+        if not isinstance(other, Person):
+            return False
         return self.name == other.name
 
     def __repr__(self):
