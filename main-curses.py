@@ -247,21 +247,16 @@ class OutlayItemsManagementForm(Widget):
         action = self.menu.onInput(ch, key)
         item = self.menu.getSelectedItem()
         if action == "ACCEPT":
-            import sys
-            print >>sys.stderr, action, item
-
             if item == "new_item":
-                print >>sys.stderr, "ni"
                 item = sqlstorage.Item(set(), u"", 0)
             if isinstance(item, sqlstorage.Item):
-                print >>sys.stderr, "i"
                 return ItemEditForm(self.dm, self.outlay, item)
             if item == "new_payment":
-                print >>sys.stderr, "np"
                 item = sqlstorage.Payment(set(), 0)
             if isinstance(item, sqlstorage.Payment):
-                print >>sys.stderr, "p"
                 return PaymentEditForm(self.dm, self.outlay, item)
+            if item == "new_persons":
+                self.new_persons
 
         elif action == "DELETE":
             self.outlay.items.remove(item)
