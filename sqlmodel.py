@@ -28,13 +28,11 @@ class Person(potcommun.Person, Base):
     __tablename__ = "Persons"
     oid = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
-    dm = Column(Integer, ForeignKey("DebtManagers.oid"))
 
 class DebtManager(potcommun.DebtManager, Base):
     __tablename__ = "DebtManagers"
     oid = Column(Integer, primary_key=True)
     name = Column(String)
-    persons = relationship(Person, collection_class=set, cascade="all, delete, delete-orphan")
     transactions = relationship("Transaction", collection_class=set, cascade="all, delete, delete-orphan") # String is a class name, not a table one.
 
 class Transaction(potcommun.Transaction, Base):
