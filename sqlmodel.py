@@ -9,31 +9,33 @@ import potcommun
 Base = declarative_base()
 metadata = Base.metadata
 
-dmgr_persons = Table('dmgr_persons', metadata,
-    Column('mgr_oid', Integer, ForeignKey('DebtManagers.oid')),
-    Column('person_oid', Integer, ForeignKey('Persons.name')),
-)
+#dmgr_persons = Table('dmgr_persons', metadata,
+    #Column('mgr_oid', Integer, ForeignKey('DebtManagers.oid')),
+    #Column('person_oid', Integer, ForeignKey('Persons.name')),
+#)
 
 persons_payments = Table('persons_payments', metadata,
-    Column('person_oid', Integer, ForeignKey('Persons.name')),
+    Column('person_oid', Integer, ForeignKey('Persons.oid')),
     Column('payments_oid', Integer, ForeignKey('AbstractPayments.oid')),
 )
 
 persons_transactions = Table('persons_transactions', metadata,
-    Column('person_oid', Integer, ForeignKey('Persons.name')),
+    Column('person_oid', Integer, ForeignKey('Persons.oid')),
     Column('transactions_oid', Integer, ForeignKey('Transactions.oid')),
 )
 
 class Person(potcommun.Person, Base):
     __tablename__ = "Persons"
-    name = Column(String, primary_key=True, nullable=False, unique=True)
+    oid = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    dm = Column(Integer, ForeignKey("DebtManagers.oid"))
 
 class DebtManager(potcommun.DebtManager, Base):
     __tablename__ = "DebtManagers"
     oid = Column(Integer, primary_key=True)
     name = Column(String)
-    persons = relationship(Person, secondary=dmgr_persons, collection_class=set)
-    transactions = relationship("Transaction", collection_class=set) # String is a class name, not a table one.
+    persons = relationship(Person, collection_class=set, cascade="all, delete, delete-orphan")
+    transactions = relationship("Transaction", collection_class=set, cascade="all, delete, delete-orphan") # String is a class name, not a table one.
 
 class Transaction(potcommun.Transaction, Base):
     __tablename__ = "Transactions"
@@ -42,8 +44,8 @@ class Transaction(potcommun.Transaction, Base):
     classType = Column(String, nullable=False) ## Inheritance
     
     date = Column(Date)
-    items = relationship("Item", collection_class=set)
-    payments = relationship("Payment", collection_class=set)
+    items = relationship("Item", collection_class=set, cascade="all, delete, delete-orphan")
+    payments = relationship("Payment", collection_class=set, cascade="all, delete, delete-orphan")
     persons = relationship(Person, secondary=persons_transactions, collection_class=set)
 
     __mapper_args__ = {
@@ -70,8 +72,8 @@ class Refund(potcommun.Refund, Transaction):
     __tablename__ = "Refunds"
     oid = Column(Integer, ForeignKey("Transactions.oid"), primary_key=True)
 
-    debitPerson = Column(Integer, ForeignKey("Persons.name"))
-    creditPerson = Column(Integer, ForeignKey("Persons.name"))
+    debitPerson = Column(Integer, ForeignKey("Persons.oid"))
+    creditPerson = Column(Integer, ForeignKey("Persons.oid"))
 
     __mapper_args__ = {
         'polymorphic_identity': 'refund',
