@@ -83,7 +83,7 @@ class AbstractPayment(potcommun.AbstractPayment, Base):
     classType = Column(String, nullable=False)
     amount = Column(Integer)
     transaction = Column(Integer, ForeignKey("Transactions.oid"))
-    persons = relationship(Person, secondary=persons_payments, collection_class=set, cascade="all, delete, delete-orphan")
+    persons = relationship(Person, secondary=persons_payments, collection_class=set, cascade="all")
 
     __tablename__ = "AbstractPayments"
     __mapper_args__ = {
