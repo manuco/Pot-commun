@@ -201,7 +201,7 @@ class BaseForm(Widget):
 class Label(Widget):
     def __init__(self, label):
         self.height = 1
-        self.width = len(label)
+        self.width = 1000
         self.text = label
         self.color = WHITE
 
@@ -381,7 +381,6 @@ class StackedFields(Widget):
 
     def __init__(self):
         self.fields = []
-        self.focusedFieldIndex = 0
 
     @property
     def focusable(self):
@@ -404,6 +403,7 @@ class StackedFields(Widget):
             y += lines
             field.layout(subwin)
             self.subwins.append(subwin)
+        self.onFocus()
 
     def draw(self):
         if len(self.fields) == 0:
@@ -434,6 +434,7 @@ class StackedFields(Widget):
 
     def onInput(self, ch, key):
         action = self.fields[self.focusedFieldIndex].onInput(ch, key)
+
         if action in ("ACCEPT", "FOCUS_NEXT"):
             self.focusedFieldIndex += 1
             while self.focusedFieldIndex < len(self.fields) and\

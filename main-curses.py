@@ -27,6 +27,9 @@ print >>sys.stderr, "\n" * 10
 def getAmountAsString(amount):
     return u"%d,%02d €" % (amount // 100, amount % 100)
 
+def getPersonsAsString(persons):
+    return u", ".join([p.name for p in persons])
+
 class WelcomeForm(BaseForm):
     def draw(self):
         BaseForm.draw(self)
@@ -244,9 +247,22 @@ class OutlayItemsManagementForm(Widget):
         action = self.menu.onInput(ch, key)
         item = self.menu.getSelectedItem()
         if action == "ACCEPT":
+            import sys
+            print >>sys.stderr, action, item
+
             if item == "new_item":
+                print >>sys.stderr, "ni"
                 item = sqlstorage.Item(set(), u"", 0)
-            return ItemEditForm(self.dm, self.outlay, item)
+            if isinstance(item, sqlstorage.Item):
+                print >>sys.stderr, "i"
+                return ItemEditForm(self.dm, self.outlay, item)
+            if item == "new_payment":
+                print >>sys.stderr, "np"
+                item = sqlstorage.Payment(set(), 0)
+            if isinstance(item, sqlstorage.Payment):
+                print >>sys.stderr, "p"
+                return PaymentEditForm(self.dm, self.outlay, item)
+
         elif action == "DELETE":
             self.outlay.items.remove(item)
             db = getDB()
@@ -255,13 +271,13 @@ class OutlayItemsManagementForm(Widget):
             return "OK"
 
     def getItems(self):
-        items = [
-            (u"Nouvel élément...", "new_item"),
-            (u"Nouveau paiment...", "new_payment"),
-        ]
-
-        items.extend([(u"%s (%s)" % (i.label, getAmountAsString(i.amount)), i) for i in self.outlay.items])
-
+        items = []
+        items.append((u"Nouvel achat...", "new_item"))
+        items.extend([(u"%s - %s (%s)" % (i.label, getAmountAsString(i.amount), getPersonsAsString(i.persons)), i) for i in self.outlay.items])
+        items.append((u"Nouveau paiment...", "new_payment"))
+        items.extend([(u"%s (%s)" % (getAmountAsString(p.amount), getPersonsAsString(p.persons)), p) for p in self.outlay.payments])
+        items.append((u"Nouveau participant...", "new_persons"))
+        items.extend([(u"%s" % p.name, p) for p in self.outlay.persons])
         #import sys
         #print >>sys.stderr, items
 
@@ -458,7 +474,79 @@ class ItemEditForm(BaseForm):
                 self.item.persons = self.personsField.persons
 
                 if self.item not in self.outlay.items:
-                    self.outlay.items.add(self.item)
+                    self.outlay.addItem(self.item)
+                db = getDB()
+                db.saveDebtManager(self.dm)
+                return 1
+            except IndexError:
+                self.errorString = u"Veuillez entrer un montant valide (15.55 par exemple)."
+                self.errorField.setText(self.errorString, RED | curses.A_BOLD)
+                self.fields.onFocus()
+            except Exception, e:
+                self.errorString = e.args[0].decode(ENCODING)
+                self.errorField.setText(self.errorString, RED | curses.A_BOLD)
+                self.fields.onFocus()
+        elif action == "CANCEL":
+            return 1
+        elif action == "FOCUS_NEXT":
+            self.fields.onFocus()
+        elif action == "FOCUS_PREVIOUS":
+            self.fields.onFocus(last=True)
+        elif action is None:
+            return BaseForm.onInput(self, ch, key)
+        else:
+            return action
+        return "OK"
+
+
+class PaymentEditForm(BaseForm):
+    def __init__(self, dm, outlay, payment):
+        self.outlay = outlay
+        self.dm = dm
+        self.payment = payment
+
+        self.amountField = InputField(u"Montant payé : ", getAmountAsString(payment.amount) if payment.amount != 0 else u"")
+        self.personsField = PersonChooserField(self.dm, u"Par qui ? ", payment.persons)
+        self.errorField = Label("")
+        self.errorString = u""
+
+        self.fields = StackedFields()
+        self.fields.add(self.amountField)
+        self.fields.add(self.errorField)
+        self.fields.add(self.personsField)
+        self.fields.add(Label(u""))
+        self.fields.add(ActivableLabel(u"Valider"))
+
+    def layout(self, win):
+        Widget.layout(self, win)
+        self.fields.layout(win.derwin(0, 0))
+
+    def draw(self):
+        self.fields.draw()
+
+    def onInput(self, ch, key):
+        self.errorField.setText(self.errorString, WHITE)
+        action = self.fields.onInput(ch, key)
+        if action == "ACCEPT":
+            try:
+                amount = self.amountField.getUserInput().strip()
+                if len(amount) > 0:
+                    RE = ur"^ *(\d+)(?:[,.](\d{1,2}))?(?: *€? *)?$"
+                    result = re.findall(RE, amount)
+                    euros = result[0][0]
+                    cents = result[0][1]
+                    if len(cents) == 0:
+                        cents = 0
+
+                    amount = int(euros) * 100 + int(cents)
+                else:
+                    amount = 0
+
+                self.payment.amount = amount
+                self.payment.persons = self.personsField.persons
+
+                if self.payment not in self.outlay.payments:
+                    self.outlay.addPayment(self.payment)
                 db = getDB()
                 db.saveDebtManager(self.dm)
                 return 1
