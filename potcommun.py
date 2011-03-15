@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import division
+import warnings
 
 class DebtManager(object):
     """
@@ -66,16 +67,23 @@ class DebtManager(object):
     """
 
     def __init__(self):
-        self.persons = set()
         self.transactions = set()
 
+    def getPersons(self):
+        result = set()
+        for transaction in self.transactions:
+            result.update(transaction.getPersons())
+        return result
+
     def addPersons(self, persons):
+        raise RuntimeError("Deprecated : add persons thru transactions.")
         if type(persons) in (type(""), type(u"")):
             raise ValueError("persons must be a non string iterable")
         self.persons.update(persons)
 
     def getPerson(self, name):
-        for person in self.persons:
+        persons = self.getPersons()
+        for person in persons:
             if name == person.name:
                 return person
 
@@ -83,12 +91,12 @@ class DebtManager(object):
         """
             Return the outlay.
         """
-        transaction.mgr = self
+        warnings.warn("Use xxx.transactions.add instead", DeprecationWarning, stacklevel=2)
         self.transactions.add(transaction)
-        self.addPersons(transaction.persons)
         return transaction
 
     def addRefund(self, refund):
+        warnings.warn("Use xxx.transactions.add instead", DeprecationWarning, stacklevel=2)
         self.transactions.add(refund)
         return refund
 
@@ -110,7 +118,7 @@ class DebtManager(object):
         else:
             elemToAdjust = None
 
-        if elemToAdjust is not None:        
+        if elemToAdjust is not None:
             missingPerPerson = missingAmount // len(persons)
             divisor = len(persons)
             roundingError = missingAmount - missingAmount // divisor * divisor
@@ -119,10 +127,10 @@ class DebtManager(object):
             for elem in [items, payments]:
                 if person not in elem.keys():
                     elem[person] = 0
-        
+
         if elemToAdjust is None:
             return items, payments
-        
+
         for person in persons:
             elemToAdjust[person] += missingPerPerson
 
@@ -139,10 +147,9 @@ class DebtManager(object):
         for transaction in self.transactions:
             perTransactionItemsTotals = AbstractPayment.computeTotals(transaction.items)
             perTransactionPaymentsTotals = AbstractPayment.computeTotals(transaction.payments)
-            perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(transaction.persons, perTransactionItemsTotals, perTransactionPaymentsTotals)
+            perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(transaction.getPersons(), perTransactionItemsTotals, perTransactionPaymentsTotals)
             itemsTotals = Item.mergeTotals(itemsTotals, perTransactionItemsTotals)
             paymentTotals = Payment.mergeTotals(paymentTotals, perTransactionPaymentsTotals)
-
 
         return itemsTotals, paymentTotals
 
@@ -151,7 +158,6 @@ class DebtManager(object):
         result = {}
         for name in totals[0].keys():
             result[name] = totals[0][name] - totals[1][name]
-            
         return result
 
     def filterNull(self, balances):
@@ -197,10 +203,11 @@ class DebtManager(object):
 
     def getPaymentsOrItemsPerPerson(self, isPayment):
         result = {}
-        for person in self.persons:
+        for person in self.getPersons():
             resultForPerson = {}
             for transaction in self.transactions:
-                if person not in transaction.persons:
+                persons_for_transaction = transaction.getPersons()
+                if person not in persons_for_transaction:
                     continue
                 items = set()
 
@@ -219,14 +226,14 @@ class DebtManager(object):
 
                 perTransactionItemsTotals = AbstractPayment.computeTotals(transaction.items)
                 perTransactionPaymentsTotals = AbstractPayment.computeTotals(transaction.payments)
-                perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(transaction.persons, perTransactionItemsTotals, perTransactionPaymentsTotals)
+                perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(persons_for_transaction, perTransactionItemsTotals, perTransactionPaymentsTotals)
 
                 if isPayment:
                     if amount < perTransactionPaymentsTotals[person]:
                         items.add(perTransactionPaymentsTotals[person] - amount)
                 else:
                     if amount < perTransactionItemsTotals[person]:
-                        items.add(("(1 / %d)" % len(transaction.persons), perTransactionItemsTotals[person] - amount))
+                        items.add(("(1 / %d)" % len(persons_for_transaction), perTransactionItemsTotals[person] - amount))
 
                 total = sum(perTransactionItemsTotals.values())
                 total2 = sum(perTransactionPaymentsTotals.values())
@@ -280,7 +287,7 @@ class DebtManager(object):
         allPayments = self.getPaymentsPerPerson()
 
 
-        persons = list(self.persons)
+        persons = list(self.getPersons())
         persons.sort()
         for person in persons:
             print person.name
@@ -312,13 +319,21 @@ class Transaction(object):
         self.persons = set()
 
     def addItem(self, item):
-        self.addPersons(item.persons)
+        warnings.warn("Use xxx.items.add instead", DeprecationWarning, stacklevel=2)
         self.items.add(item)
 
     def addPayment(self, payment):
-        self.addPersons(payment.persons)
+        warnings.warn("Use xxx.items.add instead", DeprecationWarning, stacklevel=2)
         self.payments.add(payment)
 
+    def getPersons(self):
+        result = set(self.persons)
+        for item in self.items:
+            result.update(item.persons)
+        for payment in self.payments:
+            result.update(payment.persons)
+        return result
+        
     def addPersons(self, persons):
         if type(persons) in (type(""), type(u"")):
             raise ValueError("persons must be a non string iterable")
@@ -337,7 +352,7 @@ class Outlay(Transaction):
     def __init__(self, date, label):
         Transaction.__init__(self, date)
         self.label = label
-  
+
 
 class Refund(Transaction):
     """
@@ -350,17 +365,16 @@ class Refund(Transaction):
         item = self.getItem((creditPerson, ), "Refund from %s" % debitPerson, amount)
         payment = self.getPayment((debitPerson, ), amount)
         
-        self.addItem(item)
-        self.addPayment(payment)
+        self.items.add(item)
+        self.payments.add(payment)
         
         self.debitPerson = debitPerson
         self.amount = amount
         self.creditPerson = creditPerson
 
-    def getLabel(self):
+    @property
+    def label(self):
         return "Refund to %s" % str(self.creditPerson)
-
-    label = property(getLabel)
 
 class AbstractPayment(object):
     def __init__(self, persons, amount):
