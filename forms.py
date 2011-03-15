@@ -86,6 +86,7 @@ class Widget(object):
             an integer if one or more baseform has to be unstack
             "OK" if key was succesfully handled, and no more action has to be performed
             "QUIT" if user request exiting
+            "LAYOUT" if a new layout is needed
             "FOCUS_NEXT" if the widget gives its focus to its next widget
             "FOCUS_PREVIOUS" if the widget gives its focus to its previous widget
             or others strings given the action to perform.
@@ -121,10 +122,58 @@ class Widget(object):
         """
             Called when your form will stop receiving onInputEvents.
 
-            Should be implemented by any child
+            May be implemented by any child (Not used for now)
         """
         pass
 
+
+class Checkbox(Widget):
+    """
+        A checkbox that can contain two (maybe three in the future) states :
+        True or False
+    """
+    focusable = True
+    def __init__(self, label, height=1, width=1000):
+        self.height = height
+        self.width = width
+        self.label = label
+        self.color = WHITE
+        self.state = False
+
+    def setLabel(self, label, color=None):
+        self.label = label[:self.size]
+        self.color = WHITE if color is None else color
+
+    def draw(self):
+        text = "[%s] %s" % ("X" if self.state else " ", self.label)
+        self.win.addstr(0, 0, text.encode(ENCODING), self.color)
+        #import sys
+        #print >>sys.stderr, self.label.encode(ENCODING)
+
+    def layout(self, win):
+        Widget.layout(self, win)
+        self.size = win.getmaxyx()[1] - 4
+
+    def getPreferredSize(self):
+        return self.height, self.width
+
+    def onInput(self, ch, key):
+        if key in ("KEY_BACKSPACE", "KEY_DC"):
+            self.state = False
+        elif key == "KEY_RETURN":
+            self.state = True
+            return "FOCUS_NEXT"
+        elif key == "KEY_SPACE":
+            self.state = not self.state
+        elif key == "KEY_ESCAPE":
+            return "CANCEL"
+        elif key in ("KEY_TAB", "KEY_DOWN"):
+            return "FOCUS_NEXT"
+        elif key in ("KEY_BTAB", "KEY_UP"):
+            return "FOCUS_PREVIOUS"
+        else:
+            return None
+        return "OK"
 
 class BaseForm(Widget):
     """
@@ -150,10 +199,10 @@ class BaseForm(Widget):
 
 
 class Label(Widget):
-    def __init__(self, height, width):
-        self.height = height
-        self.width = width
-        self.text = ""
+    def __init__(self, label):
+        self.height = 1
+        self.width = len(label)
+        self.text = label
         self.color = WHITE
 
     def setText(self, text, color=None):
@@ -163,8 +212,29 @@ class Label(Widget):
     def draw(self):
         self.win.addstr(0, 0, self.text.encode(ENCODING), self.color)
 
-    def getSubwinParams(self, y, win):
-        return self.height, self.width, y, 2
+    def getPreferredSize(self):
+        return self.height, 1000
+
+class ActivableLabel(Label):
+    focusable = True
+
+    def __init__(self, label, command="ACCEPT"):
+        Label.__init__(self, label)
+        self.command = command
+
+    def onInput(self, ch, key):
+        if key == "KEY_RETURN":
+            return self.command
+        elif key == "KEY_ESCAPE":
+            return "CANCEL"
+        elif key in ("KEY_TAB", "KEY_DOWN"):
+            return "FOCUS_NEXT"
+        elif key in ("KEY_BTAB", "KEY_UP"):
+            return "FOCUS_PREVIOUS"
+        else:
+            return None
+        return "OK"
+
 
 class BaseMenu(Widget):
 
@@ -328,13 +398,16 @@ class StackedFields(Widget):
         self.subwins = []
         y = 0
         for field in self.fields:
-            params = field.getSubwinParams(y, win)
-            subwin = self.win.derwin(*params)
-            y += params[0] ## nb lines
+            lines, cols = field.getPreferredSize()
+            mlines, mcols = win.getmaxyx()
+            subwin = self.win.derwin(lines, min(cols, mcols - 2), y, 2)
+            y += lines
             field.layout(subwin)
             self.subwins.append(subwin)
 
     def draw(self):
+        if len(self.fields) == 0:
+            return
         for i, field in enumerate(self.fields):
             if i != self.focusedFieldIndex:
                 field.draw()
@@ -380,6 +453,9 @@ class StackedFields(Widget):
                 return "OK"
         return action
 
+    def __len__(self):
+        return len(self.fields)
+
 class InputField(Widget):
     focusable = True
     def __init__(self, prompt, defaultValue=u""):
@@ -389,19 +465,26 @@ class InputField(Widget):
         self.pos = len(defaultValue)
         self.userInput = defaultValue
         self.unicodeBuffer = ""
+        self.scroll = 0
 
     def draw(self):
-        self.win.addstr(0, 0, (self.prompt + self.userInput).encode("utf-8"), WHITE)
-        self.win.move(0, len(self.prompt) + self.pos)
+        text = self.prompt + self.userInput[self.scroll : self.size + self.scroll]
+        self.win.addstr(0, 0, text.encode("utf-8"), WHITE)
+        self.win.move(0, len(self.prompt) + self.pos - self.scroll)
         self.win.cursyncup()
 
     @staticmethod
-    def getSubwinParams(y, win):
-        xmax = win.getmaxyx()[1]
-        return (1, xmax - 4, y, 2)
+    def getPreferredSize():
+        return (1, 100)
 
     def getUserInput(self):
         return self.userInput
+
+    def layout(self, win):
+        Widget.layout(self, win)
+        self.size = win.getmaxyx()[1] - len(self.prompt) - 1
+        if self.pos > self.size + self.scroll:
+            self.scroll += self.pos - self.size - self.scroll
 
     def onInput(self, ch, key):
         if ch >= 32 and ch < 256:
@@ -411,23 +494,34 @@ class InputField(Widget):
                 self.userInput = self.userInput[:self.pos] + uc + self.userInput[self.pos:]
                 self.unicodeBuffer = ""
                 self.pos += 1
+                if self.pos >= self.size - self.scroll:
+                    self.scroll += 1
             except UnicodeDecodeError:
                 pass
         elif key == "KEY_LEFT":
             self.pos -= 1 if self.pos > 0 else 0
+            if self.pos < self.scroll:
+                self.scroll = self.pos
         elif key == "KEY_RIGHT":
             self.pos += 1 if self.pos < len(self.userInput) else 0
+            if self.pos > self.size + self.scroll -1:
+                self.scroll += 1
         elif key == "KEY_BACKSPACE":
             if self.pos > 0:
                 self.userInput = self.userInput[:self.pos - 1] + self.userInput[self.pos:]
                 self.pos -= 1
+            if self.pos < self.scroll:
+                self.pos = self.scroll
         elif key == "KEY_DC":
             if self.pos < len(self.userInput):
                 self.userInput = self.userInput[:self.pos] + self.userInput[self.pos + 1:]
         elif key == "KEY_HOME":
             self.pos = 0
+            self.scroll = 0
         elif key == "KEY_END":
             self.pos = len(self.userInput)
+            if self.pos > self.size:
+                self.scroll = self.pos - self.size + 1
         elif key == "KEY_RETURN":
             return "ACCEPT"
         elif key == "KEY_ESCAPE":

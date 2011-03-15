@@ -19,7 +19,7 @@ locale.setlocale(locale.LC_ALL, '')
 from forms import *
 
 import sys
-sys.stderr = open("/dev/pts/6", "w")
+sys.stderr = open("/dev/pts/5", "w")
 print >>sys.stderr, "\n" * 10
 
 ## Tip : export ESCDELAY var to reduce time to interpret escape key (10 is fine)
@@ -145,7 +145,10 @@ class NewDebtManagerForm(BaseForm):
 
     def layout(self, win):
         self.win = win
-        self.inputField.layout(win.derwin(*InputField.getSubwinParams(5, win)))
+        lines, cols = self.inputField.getPreferredSize()
+        mlines, mcols = win.getmaxyx()
+        subwin = win.derwin(lines, min(cols, mcols - 2), 5, 0)
+        self.inputField.layout(subwin)
 
     def draw(self):
         self.drawTitle(u"Nouveau pot commun", WHITE)
@@ -168,7 +171,7 @@ class OutlayEditForm(BaseForm):
         self.stack = StackedFields()
         self.nameField = InputField(u"Nom : ", outlay.label)
         self.dateField = InputField(u"Date : ", unicode(outlay.date.strftime("%Y-%m-%d %H:%M:%S")))
-        self.errorMsg = Label(1, 90)
+        self.errorMsg = Label("")
         self.errorString = ""
         self.stack.add(self.nameField)
         self.stack.add(self.dateField)
@@ -177,7 +180,7 @@ class OutlayEditForm(BaseForm):
     def layout(self, win):
         self.win = win
         xmax = win.getmaxyx()[1]
-        self.workspace = self.win.derwin(3, xmax, 5, 0)
+        self.workspace = self.win.derwin(len(self.stack), xmax, 5, 0)
         self.stack.layout(self.workspace)
 
     def draw(self):
@@ -201,15 +204,17 @@ class OutlayEditForm(BaseForm):
                 self.errorMsg.setText(self.errorString, RED | curses.A_BOLD)
                 self.stack.onFocus()
                 return "OK"
-
+        elif action == "CANCEL":
+            return 1
         elif action == "FOCUS_NEXT":
             self.stack.onFocus()
             return "OK"
         elif action == "FOCUS_PREVIOUS":
             self.stack.onFocus(last=True)
             return "OK"
-        else:
+        elif action is None:
             return BaseForm.onInput(self, ch, key)
+        return action
 
 
 class OutlayItemsManagementForm(Widget):
@@ -263,8 +268,142 @@ class OutlayItemsManagementForm(Widget):
         return items
 
 
+
 class PersonChooserField(Widget):
-    pass
+    """
+        This is a simple widget that allow user to call the PersonChooserForm by pressing enter
+    """
+    focusable = True
+    def __init__(self, dm, label, persons):
+        self.dm = dm
+        self.label = label
+        self.persons = set(persons)
+
+    def getPreferredSize(self):
+        return 1, 1000
+
+    def draw(self):
+        text = self.label + ", ".join([p.name for p in self.persons])
+        self.drawStr(text)
+        self.win.move(0, len(self.label))
+        self.win.cursyncup()
+
+    def onInput(self, ch, key):
+        if key == "KEY_LEFT":
+            pass
+        elif key == "KEY_RIGHT":
+            pass
+        elif key == "KEY_BACKSPACE":
+            pass
+        elif key == "KEY_DC": # del
+            pass
+        elif key == "KEY_HOME":
+            pass
+        elif key == "KEY_END":
+            pass
+        elif key == "KEY_RETURN":
+            return PersonChooserForm(self.dm, self.persons)
+        elif key == "KEY_ESCAPE":
+            return "CANCEL"
+        elif key in ("KEY_TAB", "KEY_DOWN"):
+            return "FOCUS_NEXT"
+        elif key in ("KEY_BTAB", "KEY_UP"):
+            return "FOCUS_PREVIOUS"
+        else:
+            return None
+        return "OK"
+
+
+
+class PersonChooserForm(BaseForm):
+    def __init__(self, dm, persons):
+        self.dm = dm
+        self.persons = persons
+
+    def getAllPersons(self):
+        return set(self.dm.persons)
+
+    def updateSelectedPersons(self):
+        self.persons.clear()
+        for person, field in self.fields:
+            if field.state:
+                self.persons.add(person)
+
+    def onFocus(self):
+        self.fields = []
+        self.stack = StackedFields()
+
+        for person in self.getAllPersons():
+            field = Checkbox(person.name)
+            field.state = person in self.persons
+            self.fields.append((person, field))
+            self.stack.add(field)
+
+        self.stack.add(Label(u""))
+        self.stack.add(ActivableLabel(u"Valider", "ACCEPT_FORM"))
+        self.stack.add(ActivableLabel(u"Ajouter une personne...", "ADD_PERSON"))
+
+    def layout(self, win):
+        self.stack.layout(win)
+
+    def draw(self):
+        self.stack.draw()
+
+    def onInput(self, ch, key):
+        action = self.stack.onInput(ch, key)
+        if action == "ADD_PERSON":
+            return PersonEditForm(self.dm, sqlstorage.Person(u""))
+        elif action in ("ACCEPT", "ACCEPT_FORM"):
+            self.updateSelectedPersons()
+            return 1
+        elif action == "FOCUS_NEXT":
+            self.stack.onFocus()
+        elif action == "FOCUS_PREVIOUS":
+            self.stack.onFocus(last=True)
+        else:
+            return BaseForm.onInput(self, ch, key)
+        return "OK"
+
+class PersonEditForm(BaseForm):
+    def __init__(self, dm, person):
+        self.dm = dm
+        self.person = person
+        self.stack = StackedFields()
+        self.nameField = InputField(u"Nom : ", self.person.name)
+        self.stack.add(self.nameField)
+
+    def layout(self, win):
+        self.win = win
+        xmax = win.getmaxyx()[1]
+        self.workspace = self.win.derwin(len(self.stack), xmax, 5, 0)
+        self.stack.layout(self.workspace)
+
+    def draw(self):
+        self.drawTitle(u"Édition d'une personne", WHITE)
+        self.stack.draw()
+
+    def onInput(self, ch, key):
+        action = self.stack.onInput(ch, key)
+        if action == "ACCEPT":
+            self.person.name = self.nameField.getUserInput()
+            if self.person not in self.dm.persons:
+                self.dm.persons.add(self.person)
+            db = getDB()
+            db.saveDebtManager(self.dm)
+            return 1
+
+        elif action == "CANCEL":
+            return 1
+        elif action == "FOCUS_NEXT":
+            self.stack.onFocus()
+            return "OK"
+        elif action == "FOCUS_PREVIOUS":
+            self.stack.onFocus(last=True)
+            return "OK"
+        elif action is None:
+            return BaseForm.onInput(self, ch, key)
+        return action
+
 
 class ItemEditForm(BaseForm):
     def __init__(self, dm, outlay, item):
@@ -274,10 +413,10 @@ class ItemEditForm(BaseForm):
 
         self.labelField = InputField(u"Intitulé : ", item.label)
         self.amountField = InputField(u"Montant : ", getAmountAsString(item.amount) if item.amount != 0 else u"")
-        self.personsField = PersonChooserField(u"Qui ? ", item.label)
+        self.personsField = PersonChooserField(self.dm, u"Qui ? ", item.persons)
         #self.personsField = Label(1, 30)
         #self.personsField.setText(u"PersonChooserField à écrire !")
-        self.errorField = Label(1, 90)
+        self.errorField = Label("")
         self.errorString = u""
 
         self.fields = StackedFields()
@@ -285,6 +424,8 @@ class ItemEditForm(BaseForm):
         self.fields.add(self.amountField)
         self.fields.add(self.errorField)
         self.fields.add(self.personsField)
+        self.fields.add(Label(u""))
+        self.fields.add(ActivableLabel(u"Valider"))
 
     def layout(self, win):
         Widget.layout(self, win)
@@ -297,7 +438,6 @@ class ItemEditForm(BaseForm):
         self.errorField.setText(self.errorString, WHITE)
         action = self.fields.onInput(ch, key)
         if action == "ACCEPT":
-            pass
             try:
                 self.item.label = self.labelField.getUserInput()
 
@@ -315,6 +455,7 @@ class ItemEditForm(BaseForm):
                     amount = 0
                     
                 self.item.amount = amount
+                self.item.persons = self.personsField.persons
 
                 if self.item not in self.outlay.items:
                     self.outlay.items.add(self.item)
@@ -335,9 +476,10 @@ class ItemEditForm(BaseForm):
             self.fields.onFocus()
         elif action == "FOCUS_PREVIOUS":
             self.fields.onFocus(last=True)
-            
         elif action is None:
             return BaseForm.onInput(self, ch, key)
+        else:
+            return action
         return "OK"
 
 
@@ -411,9 +553,10 @@ class PotCommunCursesApplication(object):
 
     def main(self):
         ch = 0
+        action = None
         while self.form:
             try:
-                self.draw(ch == curses.KEY_RESIZE)
+                self.draw(action == "LAYOUT")
             except Exception, e:
                 try:
                     self.mainWindow.addstr(0, 0, "EE " + e.args[0], RED | c.A_BOLD)
@@ -435,18 +578,17 @@ class PotCommunCursesApplication(object):
                         self.form = self.formStack.pop()
                         #import sys
                         #print >>sys.stderr, self.form
-
-                        self.form.onFocus()
-                        # force new layout
-                        ch = curses.KEY_RESIZE
+                    self.form.onFocus()
+                    action = "LAYOUT"
                 except IndexError:
                     return 0
             elif isinstance(action, BaseForm):
                 self.formStack.append(self.form)
                 self.form = action
                 self.form.onFocus()
-                # force new layout
-                ch = curses.KEY_RESIZE
+                action = "LAYOUT"
+            if ch == curses.KEY_RESIZE:
+                action = "LAYOUT"
 
 
     def prompt(self):
@@ -471,6 +613,8 @@ class PotCommunCursesApplication(object):
                     key = "KEY_ESCAPE"
                 elif ch == 9:
                     key = "KEY_TAB"
+                elif ch == 32:
+                    key = "KEY_SPACE"
 
                 return ch, key
             except KeyboardInterrupt:
