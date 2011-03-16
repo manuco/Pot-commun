@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, Date
+from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, DateTime
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -41,7 +41,7 @@ class Transaction(potcommun.Transaction, Base):
     mgr = Column(Integer, ForeignKey("DebtManagers.oid")) ## Reverse
     classType = Column(String, nullable=False) ## Inheritance
     
-    date = Column(Date)
+    date = Column(DateTime)
     items = relationship("Item", collection_class=set, cascade="all, delete, delete-orphan")
     payments = relationship("Payment", collection_class=set, cascade="all, delete, delete-orphan")
     persons = relationship(Person, secondary=persons_transactions, collection_class=set)
@@ -70,8 +70,11 @@ class Refund(potcommun.Refund, Transaction):
     __tablename__ = "Refunds"
     oid = Column(Integer, ForeignKey("Transactions.oid"), primary_key=True)
 
-    debitPerson = Column(Integer, ForeignKey("Persons.oid"))
-    creditPerson = Column(Integer, ForeignKey("Persons.oid"))
+    debitPersonOid = Column(Integer, ForeignKey("Persons.oid"))
+    creditPersonOid = Column(Integer, ForeignKey("Persons.oid"))
+
+    debitPerson = relationship(Person, uselist=False, primaryjoin=(debitPersonOid==Person.__table__.c.oid))
+    creditPerson = relationship(Person, uselist=False, primaryjoin=(creditPersonOid==Person.__table__.c.oid))
 
     __mapper_args__ = {
         'polymorphic_identity': 'refund',
