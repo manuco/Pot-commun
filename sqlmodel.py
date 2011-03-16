@@ -26,8 +26,8 @@ persons_transactions = Table('persons_transactions', metadata,
 
 class Person(potcommun.Person, Base):
     __tablename__ = "Persons"
-    oid = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False, unique=True)
+    oid = Column(Integer, primary_key=True) 
+    name = Column(String, nullable=False)
 
 class DebtManager(potcommun.DebtManager, Base):
     __tablename__ = "DebtManagers"
@@ -83,7 +83,7 @@ class AbstractPayment(potcommun.AbstractPayment, Base):
     classType = Column(String, nullable=False)
     amount = Column(Integer)
     transaction = Column(Integer, ForeignKey("Transactions.oid"))
-    persons = relationship(Person, secondary=persons_payments, collection_class=set, cascade="all")
+    persons = relationship(Person, secondary=persons_payments, collection_class=set)
 
     __tablename__ = "AbstractPayments"
     __mapper_args__ = {

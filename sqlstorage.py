@@ -31,12 +31,11 @@ class Handler(object):
         session = self.getSession()
         session.add(debtManager)
         session.commit()
-        
+
     def deleteDebtManager(self, debtManager):
         session = self.getSession()
         session.delete(debtManager)
         session.commit()
-        
 
     def getManagers(self):
         return self.session.query(DebtManager)

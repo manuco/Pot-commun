@@ -109,13 +109,22 @@ class Tests(TestCase):
         self.assertEqual(r, ({"A": 5, "B": 2}, {"A": 4, "B": 3}))
 
         r = self.mgr.checkAndAdjustTotals(("A", "B"), {"A": 4}, {})
-        self.assertEqual(r, ({"A": 4, "B": 0}, {"A": 2, "B": 2}))
+        self.assertEqual(r, ({"A": 2, "B": -2}, {"A": 0, "B": 0}))
+
+        r = self.mgr.checkAndAdjustTotals(("A", "B"), {"A": 8}, {"A": 4})
+        self.assertEqual(r, ({"A": 6, "B": -2}, {"A": 4, "B": 0}))
+
+        r = self.mgr.checkAndAdjustTotals(("A", "B"), {"A": 8, "B": 4}, {"A": 10})
+        self.assertEqual(r, ({"A": 7, "B": 3}, {"A": 10, "B": 0}))
+
+        r = self.mgr.checkAndAdjustTotals(("A",), {"A": 4}, {})
+        self.assertEqual(r, ({"A": 0, }, {"A": 0, }))
 
         r = self.mgr.checkAndAdjustTotals(("A", "B"), {}, {"A": 4})
         self.assertEqual(r, ({"A": 2, "B": 2}, {"A": 4, "B": 0}))
 
 
-    def test_with_missing_info(self):
+    def test_with_missing_items(self):
         mgr = DebtManager()
         alice = Person("Alice")
         bob = Person("Bob")
@@ -126,6 +135,50 @@ class Tests(TestCase):
         result = mgr.computeDebts()
         expected = ((alice, 1000, bob),)
         self.assertEqual(result, expected)
+
+    def test_with_some_missing_items(self):
+        mgr = DebtManager()
+        alice = Person("Alice")
+        bob = Person("Bob")
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
+        mgr.transactions.add(outlay)
+        outlay.items.add(Item((alice, ), "Item", 1000))
+        outlay.payments.add(Payment((bob, ), 2000))
+        outlay.addPersons((alice,))
+        result = mgr.computeDebts()
+        expected = ((alice, 1500, bob),)
+        self.assertEqual(result, expected)
+
+
+    def test_with_missing_payments(self):
+        mgr = DebtManager()
+        alice = Person("Alice")
+        bob = Person("Bob")
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "Cinema")
+        mgr.transactions.add(outlay)
+        outlay.items.add(Item((bob, alice, ), "Item", 2000))
+        outlay.payments.add(Payment((bob,), 1000))
+        result = mgr.computeDebts()
+        expected = ((alice, 500, bob),)
+        self.assertEqual(result, expected)
+
+    def test_with_missing_payments_2(self):
+        mgr = DebtManager()
+        alice = Person("Alice")
+        bob = Person("Bob")
+        outlay = Outlay(datetime(2010, 3, 15, 21, 0, 0), "")
+        mgr.transactions.add(outlay)
+
+        outlay.items.add(Item((alice, ), "ialice", 1000))
+        outlay.items.add(Item((bob, ), "ibob", 1200))
+        outlay.items.add(Item((bob, alice, ), "shared", 800))
+
+        outlay.payments.add(Payment((bob,), 2800))
+        
+        result = mgr.computeDebts()
+        expected = ((alice, 1300, bob),)
+        self.assertEqual(result, expected)
+
 
     def test_void_operation(self):
         mgr = DebtManager()
@@ -276,7 +329,7 @@ class Tests(TestCase):
                     ("Starter", 500),
                     ("Course", 2000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((("ticket", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((("1/2 ticket", 1000), )),
             },
 
             Person("Bob"): {
@@ -284,7 +337,7 @@ class Tests(TestCase):
                     ("Course", 2500),
                     ("Wine", 1000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((("ticket", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 2000): set((("1/2 ticket", 1000), )),
             },
         }
         self.assertEqual(result, expected)
@@ -315,7 +368,7 @@ class Tests(TestCase):
                     ("Starter", 500),
                     ("Course", 2000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set(((u"(1/3)", 1000), )),
             },
 
             Person("Bob"): {
@@ -323,10 +376,10 @@ class Tests(TestCase):
                     ("Course", 2500),
                     ("Wine", 1000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set(((u"(1/3)", 1000), )),
             },
             Person("Carl"): {
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set(((u"(1/3)", 1000), )),
             },
         }
         self.assertEqual(result, expected)
@@ -360,7 +413,7 @@ class Tests(TestCase):
                     ("Starter", 500),
                     ("Course", 2000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set(((u"(1/3)", 1000), )),
             },
 
             Person("Bob"): {
@@ -368,10 +421,10 @@ class Tests(TestCase):
                     ("Course", 2500),
                     ("Wine", 1000),
                 )),
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set(((u"(1/3)", 1000), )),
             },
             Person("Carl"): {
-                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set((("(1 / 3)", 1000), )),
+                (datetime(2010, 3, 15, 21, 0, 0), "Cinema", 3000): set(((u"(1/3)", 1000), )),
             },
         }
         self.assertEqual(result, expected)
