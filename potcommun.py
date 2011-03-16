@@ -433,20 +433,32 @@ class Refund(Transaction):
     def __init__(self, date, debitPerson, amount, creditPerson):
         from datetime import datetime
         Transaction.__init__(self, date)
-        
-        item = self.getItem((creditPerson, ), "Refund from %s" % debitPerson, amount)
+        self.update(date, debitPerson, amount, creditPerson)
+
+    def update(self, date, debitPerson, amount, creditPerson):
+        self.items.clear()
+        self.payments.clear()
+
+        item = self.getItem((creditPerson, ), "Remboursement de %s" % debitPerson, amount)
         payment = self.getPayment((debitPerson, ), amount)
-        
+
         self.items.add(item)
         self.payments.add(payment)
-        
+
+        self.date = date
+
         self.debitPerson = debitPerson
-        self.amount = amount
         self.creditPerson = creditPerson
 
     @property
     def label(self):
-        return "Refund to %s" % str(self.creditPerson)
+        return u"Remboursement de %s à %s" % (self.debitPerson.name, self.creditPerson.name)
+
+    @property
+    def amount(self):
+        import sys
+        print >>sys.stderr, self.payments
+        return set(self.payments).pop().amount
 
 class AbstractPayment(object):
     def __init__(self, persons, amount):
