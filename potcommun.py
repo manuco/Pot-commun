@@ -2,6 +2,15 @@
 from __future__ import division
 import warnings
 
+__version__ = "0.0"
+
+def getAmountAsString(amount):
+    if amount < 0:
+        return u"%d,%02d €" % ((amount + 99) // 100, -amount % 100)
+    else:
+        return u"%d,%02d €" % (amount // 100, amount % 100)
+
+
 class DebtManager(object):
     """
         A debt manager, core of this module.
@@ -109,10 +118,13 @@ class DebtManager(object):
         paymentsTotal = sum(payments.values())
         roundingError = 0
 
-        if itemsTotal > paymentsTotal:
-            missingAmount = itemsTotal - paymentsTotal
-            elemToAdjust = payments
-        elif itemsTotal < paymentsTotal:
+        # We only adjust the items : what has been paid should't be adjusted
+        # It only change the way the computation is done, but the result is the same
+        # But the report are now righlty generated
+        if itemsTotal != paymentsTotal:
+            #missingAmount = itemsTotal - paymentsTotal
+            #elemToAdjust = payments
+        #elif itemsTotal < paymentsTotal:
             missingAmount = paymentsTotal - itemsTotal
             elemToAdjust = items
         else:
@@ -219,7 +231,10 @@ class DebtManager(object):
                         if isPayment:
                             items.add(amounts[person])
                         else:
-                            items.add((elem.label, amounts[person]))
+                            if len(elem.persons) > 1:
+                                items.add((u"1/%d %s" % (len(elem.persons), elem.label), amounts[person]))
+                            else:
+                                items.add((elem.label, amounts[person]))
                         amount += amounts[person]
                     except KeyError:
                         pass
@@ -229,11 +244,14 @@ class DebtManager(object):
                 perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(persons_for_transaction, perTransactionItemsTotals, perTransactionPaymentsTotals)
 
                 if isPayment:
-                    if amount < perTransactionPaymentsTotals[person]:
+                    if amount != perTransactionPaymentsTotals[person]:
+                        raise ValueError("Adjustements on payments are forbidden")
                         items.add(perTransactionPaymentsTotals[person] - amount)
                 else:
                     if amount < perTransactionItemsTotals[person]:
-                        items.add(("(1 / %d)" % len(persons_for_transaction), perTransactionItemsTotals[person] - amount))
+                        items.add((u"(1/%d)" % len(persons_for_transaction), perTransactionItemsTotals[person] - amount))
+                    elif amount > perTransactionItemsTotals[person]:
+                        items.add((u"(Réduction)", perTransactionItemsTotals[person] - amount))
 
                 total = sum(perTransactionItemsTotals.values())
                 total2 = sum(perTransactionPaymentsTotals.values())
@@ -245,44 +263,55 @@ class DebtManager(object):
         return result
 
 
-    def printItems(self, items):
-        print " --- Dépenses ---\n"
+    def getReportItems(self, items):
+        text = u" --- Dépenses ---\n\n"
         datesAndlabels = items.keys()
         datesAndlabels.sort()
         maxLabelLen = 0
         for dl in datesAndlabels:
-            maxLabelLen = max(maxLabelLen, *map(len, [d[0] for d in items[dl]]))
+            maxLabelLen = max(maxLabelLen, *map(len, [d[0] for d in items[dl]])) + 5
 
         gdTotal = 0
         for dl in datesAndlabels:
-            print dl[0], "-", dl[1], "(%s)" % format(dl[2] / 100, ".2f")
+            text += unicode(dl[0]) + u" - " + dl[1] + u"\n"
             total = 0
             for item in items[dl]:
-                print " -", item[0] + " " * (maxLabelLen - len(item[0])), format(item[1] / 100, " >8.2f")
+                text += u" - " + item[0] + u" " * (maxLabelLen - len(item[0])) + getAmountAsString(item[1]) + u"\n"
                 total += item[1]
             gdTotal += total
-            print " =", "Total" + " " * (maxLabelLen - 5), format(total / 100, " >8.2f")
-            print
+            text += u" = Total" + u" " * (maxLabelLen - 5) + getAmountAsString(total)
+            text += u"\n\n"
 
-        print "Total" + " " * (maxLabelLen - 2), format(gdTotal / 100, " >8.2f"), "\n"
-        return gdTotal
+        text += u"Total" + u" " * (maxLabelLen - 2) + getAmountAsString(gdTotal) + "\n\n"
+        return gdTotal, text
 
-    def printPayments(self, payments):
-        print " +++ Paiements +++\n"
+    def getReportPayments(self, payments):
+        text = u" +++ Paiements +++\n\n"
         datesAndlabels = payments.keys()
         datesAndlabels.sort()
 
         gdTotal = 0
         for dl in datesAndlabels:
-            print dl[0], "-", dl[1], " :", ", ".join([format(elem / 100, ".2f") for elem in payments[dl]]) + (" = " + format(sum(payments[dl]) / 100, ".2f") if len(payments[dl]) > 1 else "")
+            text += unicode(dl[0]) +  u" - " + dl[1] + u" : " + u", ".join([getAmountAsString(elem) for elem in payments[dl]]) + (u" = " + getAmountAsString(sum(payments[dl])) if len(payments[dl]) > 1 else u"") + "\n"
             gdTotal += sum(payments[dl])
-        
-        print "\nTotal   ", format(gdTotal / 100, " >8.2f"), "\n"
-        return gdTotal
+        text += u"\nTotal   " +  getAmountAsString(gdTotal) + "\n\n"
+        return gdTotal, text
+
+    def getDebtsReport(self):
+        text = u""
+        debts = self.computeDebts()
+        for a, s, b in debts:
+            text += a.name + " doit " + getAmountAsString(s) + u" à " + b.name + u"\n"
+        if len(debts) == 0:
+            text += u"Aucune dette.\n"
+        text += u"\n"
+
+        return text
 
 
-    def printReport(self):
-        print
+    def getReport(self):
+        text = u"     %s\n" % self.name
+        text += u"   %s\n\n\n" % (u"-" * (len(self.name) + 4))
         allItems = self.getItemsPerPerson()
         allPayments = self.getPaymentsPerPerson()
 
@@ -290,26 +319,36 @@ class DebtManager(object):
         persons = list(self.getPersons())
         persons.sort()
         for person in persons:
-            print person.name
-            print "=" * len(person.name) + "\n"
+            text += person.name + u"\n"
+            text +=  "=" * len(person.name) + "\n\n"
             solde = 0
             try:
-                solde = -self.printItems(allItems[person])
+                gdTotal, subText = self.getReportItems(allItems[person])
+                solde = -gdTotal
+                text += subText
             except KeyError:
-                print "Pas de dépense"
+                text += u"Pas de dépense\n"
             try:
-                solde += self.printPayments(allPayments[person])
+                gdTotal, subText = self.getReportPayments(allPayments[person])
+                solde += gdTotal
+                text += subText
+
             except KeyError:
-                print "Pas de paiement"
+                text += u"Pas de paiement\n"
 
-            print "Solde :", format(solde / 100, ".2f")
-            print
-        
-        print
-        for a, s, b in self.computeDebts():
-            print a, "doit", format(s / 100, ".2f"), "à", b
+            text += u"Solde : " + getAmountAsString(solde) + u"\n\n"
 
-        
+        if len(persons) == 0:
+            text += u"Aucune personne ne participe à ce pot commun.\n"
+        text += u"\n"
+
+        text += self.getDebtsReport()
+
+        return text
+
+    def printReport(self):
+        print self.getReport()
+
 
 class Transaction(object):
     def __init__(self, date):
@@ -347,6 +386,39 @@ class Transaction(object):
 
     def getPayment(self, *args, **kwargs):
         return Payment(*args, **kwargs)
+
+    def getItemsTotalAmount(self):
+        amount = 0
+        for item in self.items:
+            amount += item.amount
+
+        return amount
+
+    def getPaymentsTotalAmount(self):
+        amount = 0
+        for payment in self.payments:
+            amount += payment.amount
+        return amount
+
+    def getBalance(self):
+        """
+            Should be 0 if all has been declared
+            Should be > 0 if only paiment is indicated
+            < 0 let think there is an error
+        """
+        return self.getPaymentsTotalAmount() - self.getItemsTotalAmount()
+
+    def getItemForPerson(self, person):
+        """
+            Return a set of tuples, where the first element is the item
+            and the second, the part the person is involved (for items shared amongs persons)
+        """
+        result = set()
+        for item in self.items:
+            if person in item.persons:
+                result.add((item, len(item.persons)))
+        return result
+
 
 class Outlay(Transaction):
     def __init__(self, date, label):
