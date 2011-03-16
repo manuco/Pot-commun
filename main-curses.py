@@ -77,16 +77,22 @@ class DebtManagerForm(BaseForm):
             self.onFocus()
             return "OK"
         elif action == "ACCEPT":
-            outlay = self.menu.getSelectedItem()
-            if outlay == "new_outlay":
+            transaction = self.menu.getSelectedItem()
+            if transaction == "new_outlay":
                 outlay = sqlstorage.Outlay(datetime.datetime.now(), "")
                 return OutlayEditForm(self.dm, outlay)
-            elif outlay == "display_report":
+            elif transaction == "new_refund":
+                refund = sqlstorage.Refund(datetime.datetime.now(), None, 0, None)
+                return RefundEditForm(self.dm, refund)
+            elif transaction == "display_report":
                 self.displayReport()
                 return "OK"
-            elif outlay == "edit_dm":
+            elif transaction == "edit_dm":
                 return DebtManagerEditForm(self.dm)
-            return OutlayManagementForm(self.dm, outlay)
+            elif isinstance(transaction, sqlstorage.Outlay):
+                return OutlayManagementForm(self.dm, transaction)
+            elif isinstance(transaction, sqlstorage.Refund):
+                return RefundEditForm(self.dm, transaction)
         else:
             return BaseForm.onInput(self, ch, key)
 
@@ -118,6 +124,108 @@ class DebtManagerForm(BaseForm):
         curses.reset_prog_mode()
         curses.flushinp()
         self.win.refresh()
+
+class RefundEditForm(BaseForm):
+    def __init__(self, dm, refund):
+        self.dm = dm
+        self.refund = refund
+
+        self.debitPerson = set() if refund.debitPerson is None else set((refund.debitPerson,))
+        self.creditPerson = set() if refund.creditPerson is None else set((refund.creditPerson,))
+
+        self.stack = StackedFields()
+        self.dateField = InputField(u"Date : ", unicode(refund.date.strftime("%Y-%m-%d %H:%M:%S")))
+        self.debitPersonField = PersonChooserField(dm, u"De qui ? ", self.debitPerson, unique=True)
+        self.creditPersonField = PersonChooserField(dm, u"À qui ? ", self.creditPerson, unique=True)
+        self.amountField = InputField(u"Montant : ", getAmountAsString(refund.amount) if refund.amount != 0 else u"")
+        self.errorField = Label("")
+
+        self.stack.add(self.dateField)
+        self.stack.add(self.debitPersonField)
+        self.stack.add(self.creditPersonField)
+        self.stack.add(self.amountField)
+        self.stack.add(self.errorField)
+
+        self.errorString = ""
+
+    def layout(self, win):
+        self.win = win
+        xmax = win.getmaxyx()[1]
+        self.workspace = self.win.derwin(len(self.stack), xmax, 5, 0)
+        self.stack.layout(self.workspace)
+
+    def draw(self):
+        self.drawTitle(u"Édition d'un remboursement", WHITE)
+        self.stack.draw()
+
+    def onInput(self, ch, key):
+        self.errorField.setText(self.errorString, WHITE)
+        action = self.stack.onInput(ch, key)
+        if action == "ACCEPT":
+            try:
+                amount = self.amountField.getUserInput().strip()
+                if len(amount) > 0:
+                    RE = ur"^ *(\d+)(?:[,.](\d{1,2}))?(?: *€? *)?$"
+                    result = re.findall(RE, amount)
+                    euros = result[0][0]
+                    cents = result[0][1]
+                    if len(cents) == 0:
+                        cents = 0
+
+                    amount = int(euros) * 100 + int(cents)
+                else:
+                    amount = 0
+            except IndexError:
+                self.errorString = u"Veuillez entrer un montant valide (15.55 par exemple)."
+                self.errorField.setText(self.errorString, RED | curses.A_BOLD)
+                self.stack.onFocus()
+                return "OK"
+            except Exception, e:
+                self.errorString = e.args[0].decode(ENCODING)
+                self.errorField.setText(self.errorString, RED | curses.A_BOLD)
+                self.stack.onFocus()
+                return "OK"
+
+            try:
+                date = datetime.datetime.strptime(self.dateField.getUserInput(), "%Y-%m-%d %H:%M:%S")
+            except Exception, e:
+                self.errorString = e.args[0].decode(ENCODING)
+                self.errorMsg.setText(self.errorString, RED | curses.A_BOLD)
+                self.stack.onFocus()
+                return "OK"
+
+            try:
+                debitPerson = self.debitPersonField.persons.pop()
+                creditPerson = self.creditPersonField.persons.pop()
+            except KeyError:
+                self.errorString = u"Veuillez préciser les deux personnes de cette transaction."
+                self.errorField.setText(self.errorString, RED | curses.A_BOLD)
+                self.stack.onFocus()
+                return "OK"
+
+            self.refund.update(date, debitPerson, amount, creditPerson)
+
+            if self.refund not in self.dm.transactions:
+                self.dm.transactions.add(self.refund)
+
+            import sys
+            print >>sys.stderr, self.refund.date, self.refund.debitPerson, self.refund.creditPerson, self.refund.amount
+
+            db = getDB()
+            db.saveDebtManager(self.dm)
+            return 1
+        elif action == "CANCEL":
+            return 1
+        elif action == "FOCUS_NEXT":
+            self.stack.onFocus(first=True)
+            return "OK"
+        elif action == "FOCUS_PREVIOUS":
+            self.stack.onFocus(last=True)
+            return "OK"
+        elif action is None:
+            return BaseForm.onInput(self, ch, key)
+        return action
+
 
 class DebtManagerSelection(BaseForm):
 
@@ -413,10 +521,11 @@ class PersonChooserField(Widget):
         This is a simple widget that allow user to call the PersonChooserForm by pressing enter
     """
     focusable = True
-    def __init__(self, dm, label, persons):
+    def __init__(self, dm, label, persons, unique=False):
         self.dm = dm
         self.label = label
         self.persons = set(persons)
+        self.unique = unique
 
     def getPreferredSize(self):
         return 1, 1000
@@ -441,7 +550,7 @@ class PersonChooserField(Widget):
         elif key == "KEY_END":
             pass
         elif key == "KEY_RETURN":
-            return PersonChooserForm(self.dm, self.persons)
+            return PersonChooserForm(self.dm, self.persons, unique=self.unique)
         elif key == "KEY_ESCAPE":
             return "CANCEL"
         elif key in ("KEY_TAB", "KEY_DOWN"):
@@ -455,15 +564,14 @@ class PersonChooserField(Widget):
 
 import sys
 class PersonChooserForm(BaseForm):
-    def __init__(self, dm, persons, excluded = frozenset(), outlay=None):
+    def __init__(self, dm, persons, excluded = frozenset(), unique=False):
         self.dm = dm
         self.persons = persons
         self.workingSet = set(persons)
         self.newPerson = None
         self.excluded = excluded
-
-        self.outlay = outlay
         self.stack = StackedFields()
+        self.unique = unique
 
     def getAllPersons(self):
         if self.newPerson is not None and len(self.newPerson.name) == 0:
@@ -488,11 +596,17 @@ class PersonChooserForm(BaseForm):
     def onFocus(self):
         self.fields = []
         self.stack.clear()
+
         for person in self.getAllPersons():
-            field = Checkbox(person.name)
+            field = Checkbox(person.name, unique=self.unique)
             field.state = person in self.workingSet
             self.fields.append((person, field))
             self.stack.add(field)
+
+        if self.unique and len(self.workingSet) == 0 and len(self.fields) > 0:
+            person, field = self.fields[0]
+            self.workingSet.add(person)
+            field.state = True
 
         self.stack.add(Label(u""))
         self.stack.add(ActivableLabel(u"Valider", "ACCEPT_FORM"))
@@ -505,10 +619,21 @@ class PersonChooserForm(BaseForm):
         self.stack.draw()
 
     def onInput(self, ch, key):
+        if self.unique and self.stack.currentField in [f[1] for f in self.fields]:
+            if key in ("KEY_BACKSPACE", "KEY_DC", "KEY_RETURN"):
+                return "OK"
+            elif key == "KEY_SPACE":
+                for person, field in self.fields:
+                    import sys
+                    print >>sys.stderr, field.state
+                    field.state = False
+
         action = self.stack.onInput(ch, key)
         if action == "ADD_PERSON":
             self.newPerson = sqlstorage.Person(u"")
             return PersonEditForm(self.dm, self.newPerson)
+        elif action == "OK":
+            self.updateSelectedPersons()
         elif action in ("ACCEPT", "ACCEPT_FORM"):
             self.updateSelectedPersons()
             return 1

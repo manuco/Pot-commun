@@ -133,19 +133,21 @@ class Checkbox(Widget):
         True or False
     """
     focusable = True
-    def __init__(self, label, height=1, width=1000):
-        self.height = height
-        self.width = width
+    def __init__(self, label, unique=False):
         self.label = label
         self.color = WHITE
         self.state = False
+        self.unique = unique
 
     def setLabel(self, label, color=None):
         self.label = label[:self.size]
         self.color = WHITE if color is None else color
 
     def draw(self):
-        text = "[%s] %s" % ("X" if self.state else " ", self.label)
+        if self.unique:
+            text = "(%s) %s" % ("*" if self.state else " ", self.label)
+        else:
+            text = "[%s] %s" % ("X" if self.state else " ", self.label)
         self.win.addstr(0, 0, text.encode(ENCODING), self.color)
         #import sys
         #print >>sys.stderr, self.label.encode(ENCODING)
@@ -155,7 +157,7 @@ class Checkbox(Widget):
         self.size = win.getmaxyx()[1] - 4
 
     def getPreferredSize(self):
-        return self.height, self.width
+        return 1, 1000
 
     def onInput(self, ch, key):
         if key in ("KEY_BACKSPACE", "KEY_DC"):
@@ -513,6 +515,10 @@ class StackedFields(Widget):
 
     def add(self, field):
         self.fields.append(field)
+
+    @property
+    def currentField(self):
+        return self.fields[self.focusedFieldIndex]
 
     def layout(self, win):
         self.win = win
