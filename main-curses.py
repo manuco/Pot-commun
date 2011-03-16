@@ -108,7 +108,7 @@ class DebtManagerForm(BaseForm):
 
         tool = "/usr/bin/less"
         process = subprocess.Popen(
-            args=[tool, "-cM", "+g", "+G", "-PM  %lb / %L -- {0} -- (Q pour quitter)$".format(self.dm.name), ],
+            args=[tool, "-cM", "+g", "+G", "-PM  %lb / %L -- {0} -- (Q pour quitter)$".format(self.dm.name.encode(ENCODING)), ],
             executable=tool,
             stdin=subprocess.PIPE,
         )
@@ -478,7 +478,7 @@ class OutlayItemsManagementForm(Widget):
                 return PaymentEditForm(self.dm, self.outlay, item)
             if item == "new_persons":
                 self.newPersons = set(self.outlay.persons)
-                return PersonChooserForm(self.dm, self.newPersons, frozenset(self.outlay.getPersons() - self.outlay.persons), self.outlay)
+                return PersonChooserForm(self.dm, self.newPersons, excluded=frozenset(self.outlay.getPersons() - self.outlay.persons))
             if isinstance(item, sqlstorage.Person):
                 return PersonEditForm(self.dm, item)
 
