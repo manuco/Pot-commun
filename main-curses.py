@@ -2,30 +2,28 @@
 # -*- coding: utf-8 -*-
 from __future__ import  division
 
+import os
 import re
-
-import curses
-import curses as c
-import curses.wrapper
-import potcommun
 import traceback
 import datetime
+import subprocess
 
+import curses
+import curses.wrapper
+
+import potcommun
+from potcommun import getAmountAsString
 import sqlstorage
+from forms import *
 
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
-from forms import *
-
 import sys
-sys.stderr = open("/dev/pts/5", "w")
+sys.stderr = open("/dev/pts/3", "w")
 print >>sys.stderr, "\n" * 10
 
 ## Tip : export ESCDELAY var to reduce time to interpret escape key (10 is fine)
-
-def getAmountAsString(amount):
-    return u"%d,%02d €" % (amount // 100, amount % 100)
 
 def getPersonsAsString(persons):
     return u", ".join([p.name for p in persons])
@@ -52,9 +50,13 @@ class DebtManagerForm(BaseForm):
         self.onFocus()
         
     def getOutlays(self):
-        r = [(o.label, o) for o in self.dm.transactions]
-        r.append((u"Nouvelle dépense...", "new_outlay"))
-        r.append((u"Nouveau remboursement...", "new_refund"))
+        r = []
+        r.append((u" - Nouvelle dépense...", "new_outlay"))
+        r.extend([(o.label, o) for o in self.dm.transactions if isinstance(o, sqlstorage.Outlay)])
+        r.append((u" - Nouveau remboursement...", "new_refund"))
+        r.extend([(o.label, o) for o in self.dm.transactions if isinstance(o, sqlstorage.Refund)])
+        r.append((u" - Modifier ce pot commun...", "edit_dm"))
+        r.append((u" - Afficher rapport complet...", "display_report"))
         return r
         
     def layout(self, win):
@@ -76,9 +78,14 @@ class DebtManagerForm(BaseForm):
             return "OK"
         elif action == "ACCEPT":
             outlay = self.menu.getSelectedItem()
-            if outlay is "new_outlay":
+            if outlay == "new_outlay":
                 outlay = sqlstorage.Outlay(datetime.datetime.now(), "")
                 return OutlayEditForm(self.dm, outlay)
+            elif outlay == "display_report":
+                self.displayReport()
+                return "OK"
+            elif outlay == "edit_dm":
+                return DebtManagerEditForm(self.dm)
             return OutlayManagementForm(self.dm, outlay)
         else:
             return BaseForm.onInput(self, ch, key)
@@ -87,7 +94,30 @@ class DebtManagerForm(BaseForm):
         self.outlays = self.getOutlays()
         self.menu.refresh(self.outlays)
 
+    def displayReport(self):
+        curses.def_prog_mode()
+        curses.endwin()
 
+        text = self.dm.getReport()
+
+        tool = "/usr/bin/less"
+        process = subprocess.Popen(
+            args=[tool, "-cM", "+g", "+G", "-PM  %lb / %L -- {0} -- (Q pour quitter)$".format(self.dm.name), ],
+            executable=tool,
+            stdin=subprocess.PIPE,
+        )
+
+        process.stdin.write(text.encode(ENCODING))
+        process.stdin.close()
+        result = None
+        while result is None:
+            try:
+                result = process.wait()
+            except KeyboardInterrupt:
+                pass
+        curses.reset_prog_mode()
+        curses.flushinp()
+        self.win.refresh()
 
 class DebtManagerSelection(BaseForm):
 
@@ -119,7 +149,7 @@ class DebtManagerSelection(BaseForm):
         elif action == "ACCEPT":
             dm = self.menu.getSelectedItem()
             if dm is None:
-                return NewDebtManagerForm()
+                return DebtManagerEditForm(sqlstorage.DebtManager(u""))
             else:
                 return DebtManagerForm(dm)
         elif action is None:
@@ -141,10 +171,11 @@ class DebtManagerSelection(BaseForm):
         db.deleteDebtManager(dm)
         
 
-class NewDebtManagerForm(BaseForm):
+class DebtManagerEditForm(BaseForm):
 
-    def __init__(self):
-        self.inputField = InputField(u"Nom : ")
+    def __init__(self, dm):
+        self.dm = dm
+        self.inputField = InputField(u"Nom : ", dm.name)
 
     def layout(self, win):
         self.win = win
@@ -160,9 +191,9 @@ class NewDebtManagerForm(BaseForm):
     def onInput(self, ch, key):
         action = self.inputField.onInput(ch, key)
         if action == "ACCEPT":
-            dm = sqlstorage.DebtManager(self.inputField.getUserInput())
+            self.dm.name = self.inputField.getUserInput()
             db = getDB()
-            db.saveDebtManager(dm)
+            db.saveDebtManager(self.dm)
             return 1
         elif action == "CANCEL":
             return 1
@@ -210,7 +241,7 @@ class OutlayEditForm(BaseForm):
         elif action == "CANCEL":
             return 1
         elif action == "FOCUS_NEXT":
-            self.stack.onFocus()
+            self.stack.onFocus(first=True)
             return "OK"
         elif action == "FOCUS_PREVIOUS":
             self.stack.onFocus(last=True)
@@ -219,16 +250,93 @@ class OutlayEditForm(BaseForm):
             return BaseForm.onInput(self, ch, key)
         return action
 
+class OutlayDetailsForm(Widget):
+    """
+        Right pane of the outlay
+    """
+    focusable = True
+    def __init__(self, dm, outlay):
+        self.dm = dm
+        self.outlay = outlay
+        self.field = MultiLinesLabel("")
+
+    def text_involved(self, text):
+        balance = self.outlay.getBalance()
+        text += u"Participants :\n"
+        allPersons = self.outlay.getPersons()
+        for person in allPersons:
+            items = self.outlay.getItemForPerson(person)
+            if len(items) > 0:
+                total = 0
+                subText = ""
+                for item, part in items:
+                    if part > 1:
+                        subText += u"   - 1/%d %s (%s)\n" % (part, item.label, getAmountAsString(item.amount // part))
+                    else:
+                        subText += u"   - %s (%s)\n" % (item.label, getAmountAsString(item.amount // part))
+                    total += item.amount // part
+                if balance != 0:
+                    subText += u"   ? (Auto-répartition) %s\n" % getAmountAsString(balance // len(allPersons))
+                    total += balance // len(allPersons)
+                text += u" - %s (Total : %s)\n" % (person.name, getAmountAsString(total))
+                text += subText
+            elif balance != 0:
+                text += u" - %s : %s (Auto-répartition)\n" % (person.name, getAmountAsString(balance // len(allPersons)))
+            else:
+                text += u" - %s (Paiement uniquement)\n" % person.name
+        return text
+
+    def text_title(self, text):
+        text += "%s (%s)\n" % (self.outlay.label, self.outlay.date)
+        text += "%s\n\n" % "-" * len(self.outlay.label)
+
+    def text_balance(self, text):
+        balance = self.outlay.getBalance()
+        if balance > 0:
+            text += u"Achats manquants :\n"
+            text += u"Répartition auto de %s.\n" % getAmountAsString(balance)
+        elif balance < 0:
+            text += u"Erreur : les paiments ne couvrent pas les achats !\n"
+            text += u"Total : %s Manque : %s\n" % (
+                getAmountAsString(self.outlay.getItemsTotalAmount()),
+                getAmountAsString(-balance)
+            )
+        return text
+
+    def refreshText(self):
+        text = self.text_involved(u"")
+        text += "\n"
+        text = self.text_balance(text)
+        self.field.setText(text)
+
+    def layout(self, win):
+        Widget.layout(self, win)
+        self.refreshText()
+        self.field.layout(win)
+
+    def draw(self):
+        self.field.draw()
+
+    def onInput(self, ch, key):
+        return self.field.onInput(ch, key)
+
+    def onFocus(self):
+        return self.field.onFocus()
+
+    def onFocusLost(self):
+        return self.field.onFocusLost()
+
 
 class OutlayItemsManagementForm(Widget):
     """
         Left pane of the outlay
     """
-
+    focusable = True
     def __init__(self, dm, outlay):
         self.dm = dm
         self.outlay = outlay
         self.menu = BaseMenu()
+        self.newPersons = None
         self.onFocus()
 
     def layout(self, win):
@@ -237,7 +345,13 @@ class OutlayItemsManagementForm(Widget):
 
 
     def onFocus(self):
-        self.menu.refresh(self.getItems(), 0)
+        if self.newPersons is not None:
+            self.outlay.persons.clear()
+            self.outlay.persons.update(self.newPersons)
+            self.newPersons = None
+            db = getDB()
+            db.saveDebtManager(self.dm)
+        self.menu.refresh(self.getItems(), None, margin=0)
 
     def draw(self):
         self.menu.draw()
@@ -247,6 +361,8 @@ class OutlayItemsManagementForm(Widget):
         action = self.menu.onInput(ch, key)
         item = self.menu.getSelectedItem()
         if action == "ACCEPT":
+            if item == "edit_outlay":
+                return OutlayEditForm(self.dm, self.outlay)
             if item == "new_item":
                 item = sqlstorage.Item(set(), u"", 0)
             if isinstance(item, sqlstorage.Item):
@@ -256,22 +372,34 @@ class OutlayItemsManagementForm(Widget):
             if isinstance(item, sqlstorage.Payment):
                 return PaymentEditForm(self.dm, self.outlay, item)
             if item == "new_persons":
-                self.new_persons
+                self.newPersons = set(self.outlay.persons)
+                return PersonChooserForm(self.dm, self.newPersons, frozenset(self.outlay.getPersons() - self.outlay.persons), self.outlay)
+            if isinstance(item, sqlstorage.Person):
+                return PersonEditForm(self.dm, item)
 
         elif action == "DELETE":
-            self.outlay.items.remove(item)
+            item = self.menu.getSelectedItem()
+            if isinstance(item, sqlstorage.Item):
+                self.outlay.items.remove(item)
+            elif isinstance(item, sqlstorage.Payment):
+                self.outlay.payments.remove(item)
+            elif isinstance(item, sqlstorage.Person):
+                self.outlay.persons.remove(item)
             db = getDB()
             db.saveDebtManager(self.dm)
             self.onFocus()
-            return "OK"
+            return "LAYOUT"
+        else:
+            return action
 
     def getItems(self):
         items = []
-        items.append((u"Nouvel achat...", "new_item"))
+        items.append((u"- Modifier cette dépense...", "edit_outlay"))
+        items.append((u"- Nouvel achat...", "new_item"))
         items.extend([(u"%s - %s (%s)" % (i.label, getAmountAsString(i.amount), getPersonsAsString(i.persons)), i) for i in self.outlay.items])
-        items.append((u"Nouveau paiment...", "new_payment"))
+        items.append((u"- Nouveau paiment...", "new_payment"))
         items.extend([(u"%s (%s)" % (getAmountAsString(p.amount), getPersonsAsString(p.persons)), p) for p in self.outlay.payments])
-        items.append((u"Nouveau participant...", "new_persons"))
+        items.append((u"- Participants supplémentaires...", "new_persons"))
         items.extend([(u"%s" % p.name, p) for p in self.outlay.persons])
         #import sys
         #print >>sys.stderr, items
@@ -325,28 +453,44 @@ class PersonChooserField(Widget):
         return "OK"
 
 
-
+import sys
 class PersonChooserForm(BaseForm):
-    def __init__(self, dm, persons):
+    def __init__(self, dm, persons, excluded = frozenset(), outlay=None):
         self.dm = dm
         self.persons = persons
+        self.workingSet = set(persons)
+        self.newPerson = None
+        self.excluded = excluded
+
+        self.outlay = outlay
+        self.stack = StackedFields()
 
     def getAllPersons(self):
-        return set(self.dm.persons)
+        if self.newPerson is not None and len(self.newPerson.name) == 0:
+            self.newPerson = None
+        result = set(self.dm.getPersons())
+        if self.newPerson is not None:
+            self.workingSet.add(self.newPerson)
+            self.newPerson = None
+        result -= self.excluded
+        result.update(self.workingSet)
+        return result
 
     def updateSelectedPersons(self):
-        self.persons.clear()
+        self.workingSet.clear()
         for person, field in self.fields:
             if field.state:
-                self.persons.add(person)
+                self.workingSet.add(person)
+        self.persons.clear()
+        self.persons.update(self.workingSet)
+
 
     def onFocus(self):
         self.fields = []
-        self.stack = StackedFields()
-
+        self.stack.clear()
         for person in self.getAllPersons():
             field = Checkbox(person.name)
-            field.state = person in self.persons
+            field.state = person in self.workingSet
             self.fields.append((person, field))
             self.stack.add(field)
 
@@ -363,12 +507,13 @@ class PersonChooserForm(BaseForm):
     def onInput(self, ch, key):
         action = self.stack.onInput(ch, key)
         if action == "ADD_PERSON":
-            return PersonEditForm(self.dm, sqlstorage.Person(u""))
+            self.newPerson = sqlstorage.Person(u"")
+            return PersonEditForm(self.dm, self.newPerson)
         elif action in ("ACCEPT", "ACCEPT_FORM"):
             self.updateSelectedPersons()
             return 1
         elif action == "FOCUS_NEXT":
-            self.stack.onFocus()
+            self.stack.onFocus(first=True)
         elif action == "FOCUS_PREVIOUS":
             self.stack.onFocus(last=True)
         else:
@@ -381,6 +526,7 @@ class PersonEditForm(BaseForm):
         self.person = person
         self.stack = StackedFields()
         self.nameField = InputField(u"Nom : ", self.person.name)
+        self.errorField = Label("")
         self.stack.add(self.nameField)
 
     def layout(self, win):
@@ -397,16 +543,18 @@ class PersonEditForm(BaseForm):
         action = self.stack.onInput(ch, key)
         if action == "ACCEPT":
             self.person.name = self.nameField.getUserInput()
-            if self.person not in self.dm.persons:
-                self.dm.persons.add(self.person)
             db = getDB()
-            db.saveDebtManager(self.dm)
-            return 1
-
+            try:
+                db.saveDebtManager(self.dm)
+                return 1
+            except Exception, e:
+                self.errorField.setText(e)
+                db.getSession().rollback()
+                return "OK"
         elif action == "CANCEL":
             return 1
         elif action == "FOCUS_NEXT":
-            self.stack.onFocus()
+            self.stack.onFocus(first=True)
             return "OK"
         elif action == "FOCUS_PREVIOUS":
             self.stack.onFocus(last=True)
@@ -469,7 +617,7 @@ class ItemEditForm(BaseForm):
                 self.item.persons = self.personsField.persons
 
                 if self.item not in self.outlay.items:
-                    self.outlay.addItem(self.item)
+                    self.outlay.items.add(self.item)
                 db = getDB()
                 db.saveDebtManager(self.dm)
                 return 1
@@ -484,7 +632,7 @@ class ItemEditForm(BaseForm):
         elif action == "CANCEL":
             return 1
         elif action == "FOCUS_NEXT":
-            self.fields.onFocus()
+            self.fields.onFocus(first=True)
         elif action == "FOCUS_PREVIOUS":
             self.fields.onFocus(last=True)
         elif action is None:
@@ -541,7 +689,7 @@ class PaymentEditForm(BaseForm):
                 self.payment.persons = self.personsField.persons
 
                 if self.payment not in self.outlay.payments:
-                    self.outlay.addPayment(self.payment)
+                    self.outlay.payments.add(self.payment)
                 db = getDB()
                 db.saveDebtManager(self.dm)
                 return 1
@@ -556,7 +704,7 @@ class PaymentEditForm(BaseForm):
         elif action == "CANCEL":
             return 1
         elif action == "FOCUS_NEXT":
-            self.fields.onFocus()
+            self.fields.onFocus(first=True)
         elif action == "FOCUS_PREVIOUS":
             self.fields.onFocus(last=True)
         elif action is None:
@@ -572,9 +720,11 @@ class OutlayManagementForm(BaseForm):
         self.dm = dm
 
         self.leftPane = OutlayItemsManagementForm(self.dm, self.outlay)
+        self.rightPane = OutlayDetailsForm(self.dm, self.outlay)
 
         self.splitter = Splitter()
         self.splitter.addLeftPane(self.leftPane, u"Dépenses : %s" % self.outlay.label)
+        self.splitter.addRightPane(self.rightPane, u"Informations")
 
     def layout(self, win):
         self.splitter.layout(win)
@@ -586,9 +736,14 @@ class OutlayManagementForm(BaseForm):
         action = self.splitter.onInput(ch, key)
         if action is None:
             return BaseForm.onInput(self, ch, key)
+        elif action == "FOCUS_NEXT":
+            self.splitter.onFocus()
+        elif action == "FOCUS_PREVIOUS":
+            self.splitter.onFocus()
         return action
 
     def onFocus(self):
+        self.splitter.leftTitle = u"Dépenses : %s" % self.outlay.label
         self.splitter.onFocus()
 
 class PotCommunCursesApplication(object):
@@ -613,8 +768,8 @@ class PotCommunCursesApplication(object):
         win.addstr(0, x, title.encode(ENCODING), WHITE | c.A_BOLD)
         for n in range(mx):
             win.addch(1, n, curses.ACS_HLINE, CYAN)
-        my, mx = win.getmaxyx()
-        win.addstr(0, mx - 1 - len(self.lastKey), self.lastKey, GREEN)
+        
+        #win.addstr(0, mx - 1 - len(self.lastKey), self.lastKey, GREEN)
 
     def draw(self, resized):
         self.mainWindow.erase()
@@ -705,18 +860,37 @@ class PotCommunCursesApplication(object):
         except KeyboardInterrupt:
             return None, None
 
+
+def purgeUselessPersons():
+    # Yes, it's quick and dirty :
+    # We have to remove useless persons that can't be removed
+    # by sqlalchemy cascading feature due to the fact that
+    # persons can be inserted in abstract payments, but in
+    # transactions too.
+
+    # It is easier to work at the table level.
+
+    dmPersons = set()
+    for dm in getDB().getManagers():
+        dmPersons.update([p.oid for p in dm.getPersons()])
+    engine = getDB().engine
+    from sqlalchemy.sql import select
+    result = engine.execute(select([sqlstorage.Person.oid]))
+    allPersons = set([r[0] for r in result])
+    uselessPersons = allPersons - dmPersons
+    for p in uselessPersons:
+        engine.execute(sqlstorage.Person.__table__.delete().where(sqlstorage.Person.oid == p))
+
 _db = None
 def getDB():
     global _db
     if _db is None:
         _db = sqlstorage.Handler(echo=False)
-        
     return _db
 
 
 def main(mainWindow):
     init_forms()
-
     global RED, GREEN, BLUE, YELLOW, MAGENTA, CYAN, WHITE
     RED = curses.color_pair(1)
     GREEN = curses.color_pair(2)
@@ -727,7 +901,10 @@ def main(mainWindow):
     WHITE = curses.color_pair(7)
 
     app = PotCommunCursesApplication(mainWindow)
+
     app.main()
+
+    purgeUselessPersons()
 
 curses.wrapper(main)
 

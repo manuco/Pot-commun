@@ -215,6 +215,80 @@ class Label(Widget):
     def getPreferredSize(self):
         return self.height, 1000
 
+class MultiLinesLabel(Label):
+    focusable = True
+    def __init__(self, text):
+        self.height = 2
+        self.width = 1000
+        self.text = text
+        self.displayText = None
+        self.color = WHITE
+        self.scroll = 0
+        self.focus = False
+
+    def onFocus(self):
+        self.focus = True
+
+    def onFocusLost(self):
+        self.focus = False
+
+    def setText(self, text, color=None):
+        self.color = WHITE if color is None else color
+        self.text = text
+        self.displayText = None
+
+    def computeText(self):
+        self.displayText = []
+        self.height = 0
+        lines = self.text.split("\n")
+        for line in lines:
+            while len(line) > self.maxWidth:
+                self.displayText.append(line[:self.maxWidth])
+                self.height += 1
+                line = line[self.maxWidth:]
+            self.displayText.append(line)
+            self.height += 1
+
+    def getPreferredSize(self):
+        return self.text.count("\n") + 1, 1000
+
+    def layout(self, win):
+        Label.layout(self, win)
+        self.maxHeight, self.maxWidth = win.getmaxyx()
+        self.computeText()
+
+    def draw(self):
+        for i, line in enumerate(self.displayText[self.scroll:self.scroll + self.maxHeight]):
+            try:
+                self.win.addstr(i, 0, line.encode(ENCODING), self.color)
+            except Exception:
+                #import sys
+                #print >>sys.stderr, len(line), "'%s'" % line.encode(ENCODING)
+                if i + 1 != self.maxHeight or len(line) != self.maxWidth:
+                    raise
+
+        if self.focus:
+            self.win.move(0, 0)
+            self.win.cursyncup()
+
+    def onInput(self, ch, key):
+        if key == "KEY_ESCAPE":
+            return "CANCEL"
+        elif key == "KEY_TAB":
+            return "FOCUS_NEXT"
+        elif key == "KEY_BTAB":
+            return "FOCUS_PREVIOUS"
+        elif key == "KEY_DOWN":
+            if self.maxHeight + self.scroll < self.height:
+                self.scroll += 1
+        elif key == "KEY_UP":
+            if self.scroll > 0:
+                self.scroll -= 1
+        else:
+            return None
+        return "OK"
+
+
 class ActivableLabel(Label):
     focusable = True
 
@@ -240,11 +314,13 @@ class BaseMenu(Widget):
 
     selected = 0
     focusable = True
+    scroll = 0
 
-    def refresh(self, items, selected=None):
+    def refresh(self, items, selected=None, margin=4):
         """
         items should be [(label, item), ..]
         """
+        self.margin = margin
         self.items = items
         self.total = len(items)
         if selected is not None:
@@ -253,19 +329,31 @@ class BaseMenu(Widget):
             else:
                 self.selected = [i for a, i in items].index(selected)
         else:
-            self.selected = 0
+            self.selected = min(self.selected, len(self.items) - 1)
         self.itemToBeDeleted = None
+
+    def adjustScrolling(self):
+        if self.selected > self.maxItem + self.scroll - 1:
+            self.scroll = self.selected - self.maxItem + 1
+
+        if self.selected < self.scroll:
+            self.scroll = self.selected
+
+        if self.scroll > len(self.items) - self.maxItem:
+            self.scroll = max(0, len(self.items) - self.maxItem)
 
     def onInput(self, ch, key):
         if key == "KEY_DOWN":
             self.itemToBeDeleted = None
             self.selected += 1
             self.selected %= self.total
+
         elif key == "KEY_UP":
             self.itemToBeDeleted = None
             self.selected -= 1
             if self.selected < 0:
                 self.selected = self.total - 1
+
         elif key == "KEY_RETURN":
             item = self.getSelectedItem()
 
@@ -283,6 +371,7 @@ class BaseMenu(Widget):
             return "FOCUS_PREVIOUS"
         else:
             return None
+        self.adjustScrolling()
         return "OK"
 
     def getSelectedItem(self):
@@ -296,14 +385,24 @@ class BaseMenu(Widget):
             color = RED
         else:
             color = WHITE
-        self.drawMenu(self.items, self.selected, color)
+        self.drawMenu(self.items, self.selected, color, self.margin)
 
-    def drawMenu(self, items, selectedRow, color):
-        maxlen = self.drawAutoResizeBox(0, len(items) + 2, 4, WHITE)
-        for i, item in enumerate(items):
-            label = " " + item[0][:maxlen]
-            label += " " * (maxlen - len(label))
-            self.win.addstr(1 + i, 6, label.encode(ENCODING), color | c.A_REVERSE if i == selectedRow else 0)
+    def layout(self, win):
+        Widget.layout(self, win)
+        self.maxItem = win.getmaxyx()[0] - 2
+        self.adjustScrolling()
+
+    def drawMenu(self, items, selectedRow, color, margin):
+        lines = min(len(items), self.maxItem) + 2
+        maxWidth = self.drawAutoResizeBox(0, lines, margin, WHITE)
+        for i, item in enumerate(items[self.scroll:self.maxItem + self.scroll]):
+            label = " " + item[0][:maxWidth]
+            label += " " * (maxWidth - len(label))
+            self.win.addstr(1 + i, 2 + self.margin, label.encode(ENCODING), color | c.A_REVERSE if i + self.scroll == selectedRow else 0)
+            if i + self.scroll == selectedRow:
+                self.win.move(1 + i, 1 + self.margin)
+                self.win.cursyncup()
+
 
 class Splitter(Widget):
     def __init__(self):
@@ -323,6 +422,12 @@ class Splitter(Widget):
         self.leftPane = field
         self.leftTitle = title
         self.leftColor = WHITE if color is None else color
+
+    def addRightPane(self, field, title=None, color=None):
+        self.rightPane = field
+        self.rightTitle = title
+        self.rightColor = WHITE if color is None else color
+
 
     def layout(self, win):
         self.win = win
@@ -344,9 +449,14 @@ class Splitter(Widget):
         self.drawBox(0, 0, self.ymax, middle, RED)
         self.drawBox(0, middle, self.ymax, middle, GREEN)
 
-        x = middle // 2 - len(self.leftTitle + u"  ") // 2
         if self.leftTitle is not None:
-            self.win.addstr(0, x, " " + self.leftTitle.encode(ENCODING) + " ", WHITE)
+            leftTitle = self.leftTitle[:middle - 4]
+            x = middle // 2 - len(leftTitle + u"  ") // 2
+            self.win.addstr(0, x, " " + leftTitle.encode(ENCODING) + " ", WHITE | curses.A_BOLD if self.focusLeftPane else 0)
+        if self.rightTitle is not None:
+            rightTitle = self.rightTitle[:middle - 4]
+            x = middle + middle // 2 - len(rightTitle + u"  ") // 2
+            self.win.addstr(0, x, " " + rightTitle.encode(ENCODING) + " ", WHITE | curses.A_BOLD if not self.focusLeftPane else 0)
 
         self.leftPane.draw()
         self.rightPane.draw()
@@ -356,19 +466,28 @@ class Splitter(Widget):
             action = self.leftPane.onInput(ch, key)
         else:
             action = self.rightPane.onInput(ch, key)
-
-        if action in ("FOCUS_NEXT", "FOCUS_PREVIOUS"):
-            focusedPane = self.leftPane if action == "FOCUS_NEXT" else self.rightPane
-            paneToFocus = self.leftPane if action == "FOCUS_PREVIOUS" else self.rightPane
-            self.focusLeftPane = action == "FOCUS_PREVIOUS"
-
-            focusedPane.lostFocus()
-            if paneToFocus.focusable:
-                paneToFocus.onFocus()
+        focusedPane = self.leftPane if self.focusLeftPane else self.rightPane
+        if action == "FOCUS_NEXT":
+            focusedPane.onFocusLost()
+            if self.focusLeftPane and self.rightPane is not None and self.rightPane.focusable:
+                focusedPane=self.rightPane
+                self.focusLeftPane = False
+                focusedPane.onFocus()
             else:
-                return action
+                self.focusLeftPane = True
+                return "FOCUS_NEXT"
+        elif action == "FOCUS_PREVIOUS":
+            focusedPane.onFocusLost()
+            if not self.focusLeftPane and self.leftPane is not None and self.leftPane.focusable:
+                focusedPane=self.leftPane
+                self.focusLeftPane = True
+                focusedPane.onFocus()
+            else:
+                self.focusLeftPane = False
+                return "FOCUS_PREVIOUS"
         else:
             return action
+        return "OK"
 
     def onFocus(self):
         if self.focusLeftPane:
@@ -378,9 +497,9 @@ class Splitter(Widget):
 
 
 class StackedFields(Widget):
-
+    focusedFieldIndex = 0
     def __init__(self):
-        self.fields = []
+        self.clear()
 
     @property
     def focusable(self):
@@ -388,6 +507,9 @@ class StackedFields(Widget):
             if field.focusable:
                 return True
         return False
+
+    def clear(self):
+        self.fields = []
 
     def add(self, field):
         self.fields.append(field)
@@ -408,29 +530,56 @@ class StackedFields(Widget):
     def draw(self):
         if len(self.fields) == 0:
             return
+        self.win.addstr(self.focusedFieldIndex, 0, ">")
+        self.win.move(self.focusedFieldIndex, 0)
+        self.win.cursyncup()
         for i, field in enumerate(self.fields):
             if i != self.focusedFieldIndex:
                 field.draw()
         ## the focused field is drawn last
         self.fields[self.focusedFieldIndex].draw()
-        self.win.addstr(self.focusedFieldIndex, 0, ">")
 
-    def onFocus(self, last=False):
-        if last:
-            self.focusedFieldIndex = len(self.fields) - 1
+
+    def adjustIndex(self, backward=False):
+        if backward:
+            while self.focusedFieldIndex >= len(self.fields):
+                self.focusedFieldIndex -= 1
+
             while self.focusedFieldIndex > -1 and\
                 not self.fields[self.focusedFieldIndex].focusable:
                 self.focusedFieldIndex -= 1
-
+                import sys
+                print >>sys.stderr, self.focusedFieldIndex
             if self.focusedFieldIndex < 0:
                 return "FOCUS_PREVIOUS"
         else:
-            self.focusedFieldIndex = 0
+            while self.focusedFieldIndex < 0:
+                self.focusedFieldIndex += 1
             while self.focusedFieldIndex < len(self.fields) and\
                 not self.fields[self.focusedFieldIndex].focusable:
                 self.focusedFieldIndex += 1
             if self.focusedFieldIndex == len(self.fields):
+                return "FOCUS_NEXT"
+
+    def onFocus(self, index=None, first=False, last=False):
+        if last:
+            self.focusedFieldIndex = len(self.fields) - 1
+            if self.adjustIndex(backward=True) == "FOCUS_PREVIOUS":
+                return "FOCUS_PREVIOUS"
+            return
+        elif first:
+            self.focusedFieldIndex = 0
+            if self.adjustIndex() == "FOCUS_NEXT":
                 return "ACCEPT" if action == "ACCEPT" else "FOCUS_NEXT"
+            return
+        if index is not None:
+            self.focusedFieldIndex = index
+
+        index = self.focusedFieldIndex
+        if self.adjustIndex() == "FOCUS_NEXT":
+            self.focusedFieldIndex = index
+            if self.adjustIndex(backward=True) == "FOCUS_PREVIOUS":
+                raise RuntimeError("Unfocusable.")
 
     def onInput(self, ch, key):
         action = self.fields[self.focusedFieldIndex].onInput(ch, key)
