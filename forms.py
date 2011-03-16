@@ -554,8 +554,6 @@ class StackedFields(Widget):
             while self.focusedFieldIndex > -1 and\
                 not self.fields[self.focusedFieldIndex].focusable:
                 self.focusedFieldIndex -= 1
-                import sys
-                print >>sys.stderr, self.focusedFieldIndex
             if self.focusedFieldIndex < 0:
                 return "FOCUS_PREVIOUS"
         else:

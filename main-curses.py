@@ -19,9 +19,9 @@ from forms import *
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
-import sys
-sys.stderr = open("/dev/pts/3", "w")
-print >>sys.stderr, "\n" * 10
+#import sys
+#sys.stderr = open("/dev/pts/3", "w")
+#print >>sys.stderr, "\n" * 10
 
 ## Tip : export ESCDELAY var to reduce time to interpret escape key (10 is fine)
 
@@ -207,9 +207,6 @@ class RefundEditForm(BaseForm):
 
             if self.refund not in self.dm.transactions:
                 self.dm.transactions.add(self.refund)
-
-            import sys
-            print >>sys.stderr, self.refund.date, self.refund.debitPerson, self.refund.creditPerson, self.refund.amount
 
             db = getDB()
             db.saveDebtManager(self.dm)
@@ -624,8 +621,6 @@ class PersonChooserForm(BaseForm):
                 return "OK"
             elif key == "KEY_SPACE":
                 for person, field in self.fields:
-                    import sys
-                    print >>sys.stderr, field.state
                     field.state = False
 
         action = self.stack.onInput(ch, key)

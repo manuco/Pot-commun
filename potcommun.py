@@ -2,7 +2,7 @@
 from __future__ import division
 import warnings
 
-__version__ = "0.0"
+__version__ = "1.0"
 
 def getAmountAsString(amount):
     if amount < 0:
@@ -456,8 +456,6 @@ class Refund(Transaction):
 
     @property
     def amount(self):
-        import sys
-        print >>sys.stderr, self.payments
         return set(self.payments).pop().amount
 
 class AbstractPayment(object):
