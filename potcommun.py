@@ -86,9 +86,6 @@ class DebtManager(object):
 
     def addPersons(self, persons):
         raise RuntimeError("Deprecated : add persons thru transactions.")
-        if type(persons) in (type(""), type(u"")):
-            raise ValueError("persons must be a non string iterable")
-        self.persons.update(persons)
 
     def getPerson(self, name):
         persons = self.getPersons()
@@ -207,13 +204,15 @@ class DebtManager(object):
         return tuple(debts)
 
     def getItemsPerPerson(self):
-        return self.getPaymentsOrItemsPerPerson(isPayment=False)
+        return self.getPaymentsOrItemsOrRefundsPerPerson()
 
     def getPaymentsPerPerson(self):
-        return self.getPaymentsOrItemsPerPerson(isPayment=True)
+        return self.getPaymentsOrItemsOrRefundsPerPerson(isPayment=True)
 
+    def getRefundsPerPerson(self):
+        return self.getPaymentsOrItemsOrRefundsPerPerson(isRefund=True)
 
-    def getPaymentsOrItemsPerPerson(self, isPayment):
+    def getPaymentsOrItemsOrRefundsPerPerson(self, isPayment=False, isRefund=False):
         result = {}
         for person in self.getPersons():
             resultForPerson = {}
@@ -221,80 +220,122 @@ class DebtManager(object):
                 persons_for_transaction = transaction.getPersons()
                 if person not in persons_for_transaction:
                     continue
-                items = set()
 
-                amount = 0
-                elems = transaction.payments if isPayment else transaction.items
-                for elem in elems:
-                    amounts = elem.computeAmountPerPerson()
-                    try:
-                        if isPayment:
-                            items.add(amounts[person])
-                        else:
-                            if len(elem.persons) > 1:
-                                items.add((u"1/%d %s" % (len(elem.persons), elem.label), amounts[person]))
+                if isRefund and isinstance(transaction, Refund):
+                    if person == transaction.debitPerson:
+                        label = u"Remboursement à %s" % transaction.creditPerson.name
+                        amount = -transaction.amount
+                    else:
+                        label = u"Remboursement de %s" % transaction.debitPerson.name
+                        amount = transaction.amount
+                    resultForPerson[(transaction.date, label, amount)] = (set(transaction.items).pop(), set(transaction.payments).pop())
+                elif not isRefund and isinstance(transaction, Outlay):
+                    items = set()
+
+                    amount = 0
+
+                    elems = transaction.payments if isPayment else transaction.items
+                    for elem in elems:
+                        amounts = elem.computeAmountPerPerson()
+                        try:
+                            if isPayment:
+                                items.add(amounts[person])
                             else:
-                                items.add((elem.label, amounts[person]))
-                        amount += amounts[person]
-                    except KeyError:
-                        pass
+                                if len(elem.persons) > 1:
+                                    items.add((u"1/%d %s" % (len(elem.persons), elem.label), amounts[person]))
+                                else:
+                                    items.add((elem.label, amounts[person]))
+                            amount += amounts[person]
+                        except KeyError:
+                            pass
 
-                perTransactionItemsTotals = AbstractPayment.computeTotals(transaction.items)
-                perTransactionPaymentsTotals = AbstractPayment.computeTotals(transaction.payments)
-                perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(persons_for_transaction, perTransactionItemsTotals, perTransactionPaymentsTotals)
+                    perTransactionItemsTotals = AbstractPayment.computeTotals(transaction.items)
+                    perTransactionPaymentsTotals = AbstractPayment.computeTotals(transaction.payments)
+                    perTransactionItemsTotals, perTransactionPaymentsTotals = self.checkAndAdjustTotals(persons_for_transaction, perTransactionItemsTotals, perTransactionPaymentsTotals)
 
-                if isPayment:
-                    if amount != perTransactionPaymentsTotals[person]:
-                        raise ValueError("Adjustements on payments are forbidden")
-                        items.add(perTransactionPaymentsTotals[person] - amount)
-                else:
-                    if amount < perTransactionItemsTotals[person]:
-                        items.add((u"(1/%d)" % len(persons_for_transaction), perTransactionItemsTotals[person] - amount))
-                    elif amount > perTransactionItemsTotals[person]:
-                        items.add((u"(Réduction)", perTransactionItemsTotals[person] - amount))
+                    if isPayment:
+                        if amount != perTransactionPaymentsTotals[person]:
+                            raise ValueError("Adjustements on payments are forbidden")
+                    else:
+                        if amount < perTransactionItemsTotals[person]:
+                            items.add((u"(1/%d)" % len(persons_for_transaction), perTransactionItemsTotals[person] - amount))
+                        elif amount > perTransactionItemsTotals[person]:
+                            items.add((u"(Réduction)", perTransactionItemsTotals[person] - amount))
 
-                total = sum(perTransactionItemsTotals.values())
-                total2 = sum(perTransactionPaymentsTotals.values())
-                assert total == total2
-                if len(items) > 0:
-                    resultForPerson[(transaction.date, transaction.label, total)] = items
+                    total = sum(perTransactionItemsTotals.values())
+                    total2 = sum(perTransactionPaymentsTotals.values())
+                    assert total == total2
+                    if len(items) > 0:
+                        resultForPerson[(transaction.date, transaction.label, total)] = items
             if len(resultForPerson.keys()) > 0:
                 result[person] = resultForPerson
         return result
 
 
     def getReportItems(self, items):
-        text = u" --- Dépenses ---\n\n"
+        text = u"\n --- Dépenses ---\n\n"
         datesAndlabels = items.keys()
         datesAndlabels.sort()
         maxLabelLen = 0
+        maxAmountLen = 0
         for dl in datesAndlabels:
             maxLabelLen = max(maxLabelLen, *map(len, [d[0] for d in items[dl]])) + 5
+            maxAmountLen = max(maxAmountLen, *map(len, [getAmountAsString(d[1]) for d in items[dl]]))
 
         gdTotal = 0
         for dl in datesAndlabels:
             text += unicode(dl[0]) + u" - " + dl[1] + u"\n"
             total = 0
             for item in items[dl]:
-                text += u" - " + item[0] + u" " * (maxLabelLen - len(item[0])) + getAmountAsString(item[1]) + u"\n"
+                amount = getAmountAsString(item[1])
+                label = item[0]
+                text += u" - " + label + u" " * (maxLabelLen - len(label)) + u" " * (maxAmountLen - len(amount)) + amount + u"\n"
                 total += item[1]
             gdTotal += total
             text += u" = Total" + u" " * (maxLabelLen - 5) + getAmountAsString(total)
             text += u"\n\n"
 
-        text += u"Total" + u" " * (maxLabelLen - 2) + getAmountAsString(gdTotal) + "\n\n"
+        text += u"Total" + u" " * (maxLabelLen - 2) + getAmountAsString(gdTotal) + "\n"
         return gdTotal, text
 
-    def getReportPayments(self, payments):
-        text = u" +++ Paiements +++\n\n"
-        datesAndlabels = payments.keys()
+    def getReportRefunds(self, refunds):
+        text = u"\n ~~~ Remboursements ~~~\n\n"
+        datesAndlabels = refunds.keys()
         datesAndlabels.sort()
+        maxAmountLen = 0
+        for dl in datesAndlabels:
+            maxAmountLen = max(maxAmountLen, *map(len, [getAmountAsString(dl[2]) for dl in datesAndlabels]))
 
         gdTotal = 0
         for dl in datesAndlabels:
-            text += unicode(dl[0]) +  u" - " + dl[1] + u" : " + u", ".join([getAmountAsString(elem) for elem in payments[dl]]) + (u" = " + getAmountAsString(sum(payments[dl])) if len(payments[dl]) > 1 else u"") + "\n"
+            amount = getAmountAsString(dl[2])
+            text += unicode(dl[0]) +  u" - " + dl[1] + u" : " + u" " * (maxAmountLen - len(amount)) + amount + "\n"
+            gdTotal += dl[2]
+        text += u"\nTotal   " +  getAmountAsString(gdTotal) + "\n"
+        return gdTotal, text
+
+
+
+    def getReportPayments(self, payments):
+        text = u"\n +++ Paiements +++\n\n"
+        datesAndlabels = payments.keys()
+        datesAndlabels.sort()
+        maxAmountLen = 0
+        for p in payments.values():
+            for e in p:
+                maxAmountLen = max(maxAmountLen, len(getAmountAsString(e)))
+
+        gdTotal = 0
+        for dl in datesAndlabels:
+            p = list(payments[dl])
+            p.sort(reverse=True)
+            amount = getAmountAsString(p[0])
+            padding = u" " * (maxAmountLen - len(amount))
+            amounts = u", ".join([getAmountAsString(elem) for elem in p])
+            total = u" = " + getAmountAsString(dl[2]) if len(payments[dl]) > 1 else u""
+            text += unicode(dl[0]) +  u" - " + dl[1] + u" : " + padding + amounts + total + "\n"
             gdTotal += sum(payments[dl])
-        text += u"\nTotal   " +  getAmountAsString(gdTotal) + "\n\n"
+        text += u"\nTotal   " +  getAmountAsString(gdTotal) + "\n"
         return gdTotal, text
 
     def getDebtsReport(self):
@@ -308,35 +349,43 @@ class DebtManager(object):
 
         return text
 
-
     def getReport(self):
         text = u"     %s\n" % self.name
-        text += u"   %s\n\n\n" % (u"-" * (len(self.name) + 4))
+        text += u"   %s\n\n" % (u"-" * (len(self.name) + 4))
         allItems = self.getItemsPerPerson()
         allPayments = self.getPaymentsPerPerson()
-
+        allRefunds = self.getRefundsPerPerson()
 
         persons = list(self.getPersons())
-        persons.sort()
+        persons.sort(lambda a, b: cmp(a.name, b.name))
         for person in persons:
-            text += person.name + u"\n"
-            text +=  "=" * len(person.name) + "\n\n"
+            text += u" " + person.name + u"\n"
+            text +=  "=" * (len(person.name) + 2) + "\n"
             solde = 0
             try:
                 gdTotal, subText = self.getReportItems(allItems[person])
                 solde = -gdTotal
                 text += subText
             except KeyError:
-                text += u"Pas de dépense\n"
+                text += u"\n --- Pas de dépense ---\n"
             try:
                 gdTotal, subText = self.getReportPayments(allPayments[person])
                 solde += gdTotal
                 text += subText
 
             except KeyError:
-                text += u"Pas de paiement\n"
+                text += u"\n +++ Pas de paiement +++\n"
 
-            text += u"Solde : " + getAmountAsString(solde) + u"\n\n"
+            try:
+                gdTotal, subText = self.getReportRefunds(allRefunds[person])
+                solde -= gdTotal
+                text += subText
+
+            except KeyError:
+                text += u"\n ~~~ Pas de remboursement ~~~\n"
+
+
+            text += u"\nSolde : " + getAmountAsString(solde) + u"\n\n"
 
         if len(persons) == 0:
             text += u"Aucune personne ne participe à ce pot commun.\n"
@@ -372,7 +421,7 @@ class Transaction(object):
         for payment in self.payments:
             result.update(payment.persons)
         return result
-        
+
     def addPersons(self, persons):
         if type(persons) in (type(""), type(u"")):
             raise ValueError("persons must be a non string iterable")
