@@ -23,6 +23,7 @@ locale.setlocale(locale.LC_ALL, '')
 #sys.stderr = open("/dev/pts/3", "w")
 #print >>sys.stderr, "\n" * 10
 
+os.environ["ESCDELAY"] = "10"
 ## Tip : export ESCDELAY var to reduce time to interpret escape key (10 is fine)
 
 def getPersonsAsString(persons):
@@ -47,27 +48,38 @@ class DebtManagerForm(BaseForm):
     def __init__(self, dm):
         self.dm = dm
         self.menu = BaseMenu()
+        self.statsLabel = MultiLinesLabel("")
+
         self.onFocus()
         
     def getOutlays(self):
         r = []
         r.append((u" - Nouvelle dépense...", "new_outlay"))
-        r.extend([(o.label, o) for o in self.dm.transactions if isinstance(o, sqlstorage.Outlay)])
+        i = [(o.date.strftime('%Y-%m-%d') + u" " +  o.label, o) for o in self.dm.transactions if isinstance(o, sqlstorage.Outlay)]
+        i.sort(lambda a, b: cmp(a[1].date, b[1].date), reverse=True)
+        r.extend(i)
         r.append((u" - Nouveau remboursement...", "new_refund"))
-        r.extend([(o.label, o) for o in self.dm.transactions if isinstance(o, sqlstorage.Refund)])
+        i = [(o.label, o) for o in self.dm.transactions if isinstance(o, sqlstorage.Refund)]
+        i.sort()
+        r.extend(i)
         r.append((u" - Modifier ce pot commun...", "edit_dm"))
         r.append((u" - Afficher rapport complet...", "display_report"))
         return r
-        
+
     def layout(self, win):
         BaseForm.layout(self, win)
-        self.menu.layout(self.win.derwin(4, 0))
-       
+        ymax, xmax = win.getmaxyx()
+        topOffset = 0
+        menuLinesCount = min(len(self.outlays), 13)
+        self.menu.layout(self.win.derwin(menuLinesCount + 2, xmax, topOffset, 0))
+
+        self.statsLabel.layout(self.win.derwin(topOffset + menuLinesCount + 2, 7))
+
     def draw(self):
         BaseForm.draw(self)
-        self.drawTitle(u"Pot commun : %s" % self.dm.name, WHITE)
         self.menu.draw()
-        
+        self.statsLabel.draw()
+
     def onInput(self, ch, key):
         action = self.menu.onInput(ch, key)
         if action == "DELETE":
@@ -93,12 +105,52 @@ class DebtManagerForm(BaseForm):
                 return OutlayManagementForm(self.dm, transaction)
             elif isinstance(transaction, sqlstorage.Refund):
                 return RefundEditForm(self.dm, transaction)
-        else:
+        elif action is None:
             return BaseForm.onInput(self, ch, key)
+        return action
+
+    def getStats(self):
+        leftLines = [u"Soldes :"]
+
+        maxName = 0
+        maxAmount = 0
+        for person, balance in self.dm.computeBalances().items():
+            maxName = max(maxName, len(person.name))
+            maxAmount = max(maxAmount, len(getAmountAsString(balance)))
+
+        maxName += 2
+
+        balances = self.dm.computeBalances().items()
+        balances.sort(lambda a, b: cmp(a[1], b[1]))
+
+        for person, balance in balances:
+            name = person.name
+            amount = getAmountAsString(balance)
+            padding = u" " * ((maxName - len(name)) + (maxAmount - len(amount)))
+            leftLines.append(name + padding + amount)
+
+        rightLines = [u"%sDettes :" % (u" " * (len(leftLines[0]) - 1))]
+        debts = self.dm.computeDebts()
+        for debit, amount, credit in debts:
+            rightLines.append(u"%s -> %s -> %s" % (debit.name, getAmountAsString(amount), credit.name))
+
+        if len(leftLines) > len(rightLines):
+            rightLines.extend([u"" for i in range(len(leftLines) - len(rightLines))])
+        else:
+            leftLines.extend([u"" for i in range(len(rightLines) - len(leftLines))])
+
+        lines = []
+        for left, right in zip(leftLines, rightLines):
+            lines.append("%s            %s" % (left, right))
+        if len(lines) == 1:
+            return u""
+        return "\n".join(lines)
 
     def onFocus(self):
         self.outlays = self.getOutlays()
         self.menu.refresh(self.outlays)
+        self.menu.setTitle(u"Pot commun : %s" % self.dm.name)
+        self.statsLabel.setText(self.getStats())
 
     def displayReport(self):
         curses.def_prog_mode()
@@ -176,7 +228,7 @@ class RefundEditForm(BaseForm):
                 else:
                     amount = 0
             except IndexError:
-                self.errorString = u"Veuillez entrer un montant valide (15.55 par exemple)."
+                self.errorString = u"Veuillez entrer un montant positif valide (15.55 par exemple)."
                 self.errorField.setText(self.errorString, RED | curses.A_BOLD)
                 self.stack.onFocus()
                 return "OK"
@@ -190,13 +242,13 @@ class RefundEditForm(BaseForm):
                 date = datetime.datetime.strptime(self.dateField.getUserInput(), "%Y-%m-%d %H:%M:%S")
             except Exception, e:
                 self.errorString = e.args[0].decode(ENCODING)
-                self.errorMsg.setText(self.errorString, RED | curses.A_BOLD)
+                self.errorField.setText(self.errorString, RED | curses.A_BOLD)
                 self.stack.onFocus()
                 return "OK"
 
             try:
-                debitPerson = self.debitPersonField.persons.pop()
-                creditPerson = self.creditPersonField.persons.pop()
+                debitPerson = set(self.debitPersonField.persons).pop()
+                creditPerson = set(self.creditPersonField.persons).pop()
             except KeyError:
                 self.errorString = u"Veuillez préciser les deux personnes de cette transaction."
                 self.errorField.setText(self.errorString, RED | curses.A_BOLD)
@@ -264,6 +316,7 @@ class DebtManagerSelection(BaseForm):
         db = getDB()
         
         r = [(dm.name, dm) for dm in db.getManagers()]
+        r.sort()
         r.append(
             (u"Nouveau pot commun...", None),
         )
@@ -501,11 +554,17 @@ class OutlayItemsManagementForm(Widget):
         items = []
         items.append((u"- Modifier cette dépense...", "edit_outlay"))
         items.append((u"- Nouvel achat...", "new_item"))
-        items.extend([(u"%s - %s (%s)" % (i.label, getAmountAsString(i.amount), getPersonsAsString(i.persons)), i) for i in self.outlay.items])
+        i = [(u"%s - %s (%s)" % (i.label, getAmountAsString(i.amount), getPersonsAsString(i.persons)), i) for i in self.outlay.items]
+        i.sort()
+        items.extend(i)
         items.append((u"- Nouveau paiment...", "new_payment"))
-        items.extend([(u"%s (%s)" % (getAmountAsString(p.amount), getPersonsAsString(p.persons)), p) for p in self.outlay.payments])
+        i = [(u"%s (%s)" % (getAmountAsString(p.amount), getPersonsAsString(p.persons)), p) for p in self.outlay.payments]
+        i.sort(lambda a, b: cmp(a[1].amount, b[1].amount))
+        items.extend(i)
         items.append((u"- Participants supplémentaires...", "new_persons"))
-        items.extend([(u"%s" % p.name, p) for p in self.outlay.persons])
+        i = [(u"%s" % p.name, p) for p in self.outlay.persons]
+        i.sort()
+        items.extend(i)
         #import sys
         #print >>sys.stderr, items
 
@@ -528,7 +587,7 @@ class PersonChooserField(Widget):
         return 1, 1000
 
     def draw(self):
-        text = self.label + ", ".join([p.name for p in self.persons])
+        text = self.label + ", ".join([p.name for p in self.persons]) + u"  [Entrée pour choisir...]"
         self.drawStr(text)
         self.win.move(0, len(self.label))
         self.win.cursyncup()
@@ -564,31 +623,31 @@ class PersonChooserForm(BaseForm):
     def __init__(self, dm, persons, excluded = frozenset(), unique=False):
         self.dm = dm
         self.persons = persons
-        self.workingSet = set(persons)
         self.newPerson = None
-        self.excluded = excluded
-        self.stack = StackedFields()
+        self.excluded = frozenset(excluded)
+        self.stack = StackedFields(nextOnAccept=False)
         self.unique = unique
 
     def getAllPersons(self):
-        if self.newPerson is not None and len(self.newPerson.name) == 0:
-            self.newPerson = None
         result = set(self.dm.getPersons())
-        if self.newPerson is not None:
-            self.workingSet.add(self.newPerson)
-            self.newPerson = None
         result -= self.excluded
-        result.update(self.workingSet)
+
+        if self.newPerson is not None:
+            if len(self.newPerson.name) != 0:
+                if self.unique:
+                    self.persons.clear()
+                self.persons.add(self.newPerson)
+            self.newPerson = None
+        result.update(self.persons)
+        result = list(result)
+        result.sort(lambda x, y: cmp(x.name, y.name))
         return result
 
     def updateSelectedPersons(self):
-        self.workingSet.clear()
+        self.persons.clear()
         for person, field in self.fields:
             if field.state:
-                self.workingSet.add(person)
-        self.persons.clear()
-        self.persons.update(self.workingSet)
-
+                self.persons.add(person)
 
     def onFocus(self):
         self.fields = []
@@ -596,13 +655,13 @@ class PersonChooserForm(BaseForm):
 
         for person in self.getAllPersons():
             field = Checkbox(person.name, unique=self.unique)
-            field.state = person in self.workingSet
+            field.state = person in self.persons
             self.fields.append((person, field))
             self.stack.add(field)
 
-        if self.unique and len(self.workingSet) == 0 and len(self.fields) > 0:
+        if self.unique and len(self.persons) == 0 and len(self.fields) > 0:
             person, field = self.fields[0]
-            self.workingSet.add(person)
+            self.persons.add(person)
             field.state = True
 
         self.stack.add(Label(u""))
@@ -617,9 +676,9 @@ class PersonChooserForm(BaseForm):
 
     def onInput(self, ch, key):
         if self.unique and self.stack.currentField in [f[1] for f in self.fields]:
-            if key in ("KEY_BACKSPACE", "KEY_DC", "KEY_RETURN"):
+            if key in ("KEY_BACKSPACE", "KEY_DC", ):
                 return "OK"
-            elif key == "KEY_SPACE":
+            elif key in ("KEY_IC", "X", "x", "KEY_RETURN", "KEY_SPACE"):
                 for person, field in self.fields:
                     field.state = False
 
@@ -888,8 +947,8 @@ class PotCommunCursesApplication(object):
         win.addstr(0, x, title.encode(ENCODING), WHITE | c.A_BOLD)
         for n in range(mx):
             win.addch(1, n, curses.ACS_HLINE, CYAN)
-        
-        #win.addstr(0, mx - 1 - len(self.lastKey), self.lastKey, GREEN)
+
+        win.addstr(0, mx - 1 - len(self.lastKey), self.lastKey, GREEN)
 
     def draw(self, resized):
         self.mainWindow.erase()

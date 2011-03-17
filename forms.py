@@ -162,11 +162,15 @@ class Checkbox(Widget):
     def onInput(self, ch, key):
         if key in ("KEY_BACKSPACE", "KEY_DC"):
             self.state = False
-        elif key == "KEY_RETURN":
+        elif key in ("KEY_IC", "X", "x"):
             self.state = True
-            return "FOCUS_NEXT"
+        elif key == "KEY_RETURN":
+            if self.unique:
+                self.state = True
+            return "ACCEPT"
         elif key == "KEY_SPACE":
             self.state = not self.state
+            return "FOCUS_NEXT" if not self.unique else "OK"
         elif key == "KEY_ESCAPE":
             return "CANCEL"
         elif key in ("KEY_TAB", "KEY_DOWN"):
@@ -257,9 +261,11 @@ class MultiLinesLabel(Label):
     def layout(self, win):
         Label.layout(self, win)
         self.maxHeight, self.maxWidth = win.getmaxyx()
-        self.computeText()
+        self.displayText = None
 
     def draw(self):
+        if self.displayText == None:
+            self.computeText()
         for i, line in enumerate(self.displayText[self.scroll:self.scroll + self.maxHeight]):
             try:
                 self.win.addstr(i, 0, line.encode(ENCODING), self.color)
@@ -317,6 +323,7 @@ class BaseMenu(Widget):
     selected = 0
     focusable = True
     scroll = 0
+    title = u""
 
     def refresh(self, items, selected=None, margin=4):
         """
@@ -333,6 +340,10 @@ class BaseMenu(Widget):
         else:
             self.selected = min(self.selected, len(self.items) - 1)
         self.itemToBeDeleted = None
+
+
+    def setTitle(self, title=u""):
+        self.title = title
 
     def adjustScrolling(self):
         if self.selected > self.maxItem + self.scroll - 1:
@@ -367,6 +378,11 @@ class BaseMenu(Widget):
             item = self.getSelectedItem()
             if item is not None and type(item) != type(""):
                 self.itemToBeDeleted = item
+        elif key == "KEY_ESCAPE":
+            if self.itemToBeDeleted is not None:
+                self.itemToBeDeleted = None
+            else:
+                return None
         elif key == "KEY_TAB":
             return "FOCUS_NEXT"
         elif key == "KEY_BTAB":
@@ -374,6 +390,7 @@ class BaseMenu(Widget):
         else:
             return None
         self.adjustScrolling()
+
         return "OK"
 
     def getSelectedItem(self):
@@ -397,6 +414,12 @@ class BaseMenu(Widget):
     def drawMenu(self, items, selectedRow, color, margin):
         lines = min(len(items), self.maxItem) + 2
         maxWidth = self.drawAutoResizeBox(0, lines, margin, WHITE)
+        if len(self.title) > 0:
+            title = " %s " % self.title
+            maxx = self.win.getmaxyx()[1]
+            titleLen = len(title)
+            x = maxx // 2 - titleLen // 2
+            self.win.addstr(0, x, title.encode(ENCODING), WHITE)
         for i, item in enumerate(items[self.scroll:self.maxItem + self.scroll]):
             label = " " + item[0][:maxWidth]
             label += " " * (maxWidth - len(label))
@@ -500,8 +523,9 @@ class Splitter(Widget):
 
 class StackedFields(Widget):
     focusedFieldIndex = 0
-    def __init__(self):
+    def __init__(self, nextOnAccept=True):
         self.clear()
+        self.nextOnAccept = nextOnAccept
 
     @property
     def focusable(self):
@@ -595,7 +619,7 @@ class StackedFields(Widget):
                 self.focusedFieldIndex += 1
             if self.focusedFieldIndex == len(self.fields):
                 return action
-            return "OK"
+            return "ACCEPT" if action == "ACCEPT" and not self.nextOnAccept else "OK"
         elif action == "FOCUS_PREVIOUS":
             self.focusedFieldIndex -= 1
             while self.focusedFieldIndex > -1 and\
