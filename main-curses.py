@@ -63,7 +63,7 @@ class DebtManagerForm(BaseForm):
         i.sort()
         r.extend(i)
         r.append((u" - Modifier ce pot commun...", "edit_dm"))
-        r.append((u" - Afficher rapport complet...", "display_report"))
+        r.append((u" - Afficher un rapport complet...", "display_report"))
         return r
 
     def layout(self, win):
@@ -116,16 +116,16 @@ class DebtManagerForm(BaseForm):
         maxAmount = 0
         for person, balance in self.dm.computeBalances().items():
             maxName = max(maxName, len(person.name))
-            maxAmount = max(maxAmount, len(getAmountAsString(balance)))
+            maxAmount = max(maxAmount, len(getAmountAsString(-balance)))
 
         maxName += 2
 
         balances = self.dm.computeBalances().items()
-        balances.sort(lambda a, b: cmp(a[1], b[1]))
+        balances.sort(lambda a, b: cmp(a[1], b[1]), reverse=True)
 
         for person, balance in balances:
             name = person.name
-            amount = getAmountAsString(balance)
+            amount = getAmountAsString(-balance)
             padding = u" " * ((maxName - len(name)) + (maxAmount - len(amount)))
             leftLines.append(name + padding + amount)
 
@@ -454,7 +454,7 @@ class OutlayDetailsForm(Widget):
             text += u"Achats manquants :\n"
             text += u"Répartition auto de %s.\n" % getAmountAsString(balance)
         elif balance < 0:
-            text += u"Erreur : les paiments ne couvrent pas les achats !\n"
+            text += u"Erreur : les paiements ne couvrent pas les achats !\n"
             text += u"Total : %s Manque : %s\n" % (
                 getAmountAsString(self.outlay.getItemsTotalAmount()),
                 getAmountAsString(-balance)
@@ -557,7 +557,7 @@ class OutlayItemsManagementForm(Widget):
         i = [(u"%s - %s (%s)" % (i.label, getAmountAsString(i.amount), getPersonsAsString(i.persons)), i) for i in self.outlay.items]
         i.sort()
         items.extend(i)
-        items.append((u"- Nouveau paiment...", "new_payment"))
+        items.append((u"- Nouveau paiement...", "new_payment"))
         i = [(u"%s (%s)" % (getAmountAsString(p.amount), getPersonsAsString(p.persons)), p) for p in self.outlay.payments]
         i.sort(lambda a, b: cmp(a[1].amount, b[1].amount))
         items.extend(i)
