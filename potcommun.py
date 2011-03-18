@@ -452,7 +452,7 @@ class Transaction(object):
     def getBalance(self):
         """
             Should be 0 if all has been declared
-            Should be > 0 if only paiment is indicated
+            Should be > 0 if only payments are indicated
             < 0 let think there is an error
         """
         return self.getPaymentsTotalAmount() - self.getItemsTotalAmount()
