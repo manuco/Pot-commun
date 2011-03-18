@@ -1,15 +1,63 @@
-Pot Commun est un gestionnaire de dettes informelles entres amis.
+Pot Commun est un gestionnaire de dettes informelles entres amis. Il est composé d'une bibliotèque en Python (et sans autre dépendance) ainsi que d'une interface en ncurses neccessitant sqlalchemy pour stocker les données entrées.
+
+ Pourquoi ?
+------------
 
 L'idée est basiquement de simplifier la gestion financière lors d'un voyage entre amis.
 
-Supposons que vous partiez à 4 à la montagne. Vous devrez faire des courses, dont le montant sera divisé de façon équitable. Vous irez aussi plusieurs fois au restaurant, prenant des plats différents dont le prix n'est pas forcément le même. À mois que vous soyez tous très aisé, certains feront plus attention à ce qu'ils prennent que d'autres. Autre exemple, certains ne voudront pas faire un repas complet à midi, alors que d'autres au contraire voudront faire un repas consistant. Souvent, les commerçants rechigneront à faire une note par personne, et diviser la note simplement par le nombre de participant risque de faire grincer quelques dents (surtout celles de ceux qui se sont restraint...).
+Supposons que vous partiez à 4 à la montagne. Vous devrez faire des courses, dont le montant sera divisé de façon équitable. Vous irez aussi plusieurs fois au restaurant, prenant des plats différents dont le prix n'est pas forcément le même. À moins que vous soyez tous très aisé, certains feront plus attention à ce qu'ils prennent que d'autres. Autre exemple, certains ne voudront pas faire un repas complet à midi, alors que d'autres au contraire voudront faire un repas consistant. Souvent, les commerçants rechigneront à faire une note par personne, et diviser la note simplement par le nombre de participant risque de faire grincer quelques dents (surtout celles de ceux qui se sont restraint...).
 
 La solution que j'ai adopté (avec mes amis) est plus complexe qu'une simple division, mais permet :
-    - de simplifier le passage à la caisse : une personne avant les sous pour tout le monde (cette personne changeant à chaque addition)
-    - de rester juste vis-à-vis de tout le monde : la personne qui ne mange et boit pas beaucoup ne paye pas le festin des autres
+    - de simplifier le passage à la caisse : une personne avance les sous pour tout le monde (cette personne pouvant changer à chaque passage en caisse) ;
+    - de rester juste vis-à-vis de tout le monde : la personne qui ne mange et ne boit pas beaucoup ne paye pas le festin des autres.
 
-Dans la pratique, à chaque note, on met en retrait di ticket qui a prit quoi. À la fin, on met en correspondance les avances et les consommations de chacun et ceux qui ont moins payés remboursent ceux qui ont payés plus.
+Dans la pratique, à chaque note, on met en retrait du ticket qui a prit quoi. À la fin du séjour, on met en correspondance les avances et les consommations de chacun et ceux qui ont moins payés remboursent ceux qui ont payés plus.
 
 Le seul inconvénient est qu'il faut "faire les comptes" à la fin des vacances, et cette opération est un peu délicate puisque qu'elle demande plusieurs calculs et de la rigueur.
 
-Pot-commun est là pour automatiser ce calcul final.
+Pot-commun est là pour automatiser ce calcul final. En entrant dans le programme chacune des dépenses et leur répartition, ce dernier indique qui doit combien à qui, immédiatement et de façon automatique.
+
+ Dépendances
+-------------
+
+Pot Commun nécessite :
+ - Python 2.6 minimum (peut-être 2.5)
+ - SQLAlchemy 0.6.x pour l'interface
+ - libcurses (NCurses) pour l'interface (inclus dans Python)
+
+ Possibilités de transaction possible
+--------------------------------------
+
+Il existe différents sites et programmes permettant de "faire les comptes". Souvent, les transactions disponibles ne sont pas assez riches par rapport aux situations réellements rencontrées. Le modèle que j'ai choisi permet, entre autre :
+
+- courses communes : une personne paie un montant global qui est réparti entre un ensemble de personnes.
+Options possibles :
+ - plusieurs personnes peuvent payer, avec un montant spécifique par personne
+ - les personnes qui payent peuvent ne pas être intégrées dans la répartition du montant  
+ - chaque personne peut faire passer des achats personnels qui ne seront pas répartis pour les autres
+ 
+- restaurant : chaque personne commance ce qu'elle souhaite. Une seule personne paye à la fin. Les couts sont réparti de façon équitable : chaque personne n'aura à rembourser qu'à la hauteur du cout de sa commande.
+Options possibles :
+ - achats partagés : une bouteille de vin, par exemple, peut être répartie entre différentes personnes
+ - réduction possible : si le total du ticket est inférieur au total des consommations, la différence est répartie entre tous les membres de la transaction
+ 
+- avance simple : un achat pour quelqu'un peut être payé par quelqu'un d'autre. 
+ 
+- remboursement : une personne peut choisir de rembourser une autre personne une somme arbitraire. Cette somme est prise en compte dans le calcul des dettes.
+
+Il s'agit d'exemples : le fonctionnement du programme est suffisament générique pour prendre en compte tous ces cas avec la même interface.
+ 
+ Histoire du développement
+---------------------------
+
+Le développement de ce programme s'est fait principalement pendant mes vacances, et l'utilisation de la bibliothèque a commencé alors même que toutes les fonctionnalités n'étaient pas disponibles (il manquait la notion de remboursement, l'extraction des données, etc.). Seul le calcul de dettes finales fonctionnait à peu près correctement.
+
+La première grande phase de développement s'est faite avant et surtout pendant mon voyage au Japon. L'écriture s'est principalement déroulée certains soir dans les hotels ou les ryokan, et surtout dans le Shinkansen, entre les villes de Tōkyō, Kyōto, Ōsaka et Hiroshima.
+
+C'est lors de cette phase que les bases de l'interface ont été posées, assez douloureusement je dois dire : programmer pendant un voyage n'a rien de simple : on est intérompu assez régulièrement. De plus, le Shinkansen n'ayant pas volé sa réputation de train rapide, les séances de développement étaient assez réduites, bien que le confort soit au rendez-vous. Lors du voyage, l'interface n'étant qu'à ses balbutiements, les seules innovations fonctionnelles ont été la génération d'un rapport synthétique, dont la forme n'a que peut évoluée depuis, ainsi que l'ajout de la notion de remboursement (une personne rembourse directement une autre). Mais à l'époque, les remboursements n'étaient pas satisfaisant : cela donnait plutot l'impression d'une correction vite faite, et pas tant d'un developpement s'intégrant proprement dans le reste de l'ensemble.
+
+Par la suite divers petits ajouts et corrections de bugs ont parsemé la grande période entre les première et deuxième grandes phases de développement. C'est lors de cette période que la notion de remboursement telle qu'elle existe aujourd'hui a été intégrée. L'idée m'est venu de la part d'un site (dont je ne trouve plus l'adresse) qui propose le même service que la bibliothèque existante, mais avec moins de fonctionnalité (à la date du 18 mars 2011)
+
+Hasard ou coïncidence, la deuxième grande phase de développement a eu lieu la semaine suivant le tremblement de terre au large de Sendai et lors du déroulement de l'accident nucléaire qui suivi à Fukushima Daiichi. À noter que cette période correspond également aux révolutions tunisiennes, égyptiennes et lybiennes, ainsi que des manifestations dans le reste du monde arabe. Cette deuxième phase est caractérisée par la densité de son développement. En moins d'une semaine l'interface prenait enfin vraiment forme, avec une ergonomie suffisante pour être à l'aise avec. L'ensemble des fonctionnalités de la bibliothèque sont disponibles et utilisables.
+
+La semaine du 19 au 25 mars 2011 sera le baptème de ce programme, avec une utilisation réelle du programme incluant de vrais situations.
