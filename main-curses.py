@@ -3,7 +3,6 @@
 from __future__ import  division
 
 import os
-import re
 import traceback
 import datetime
 import subprocess
@@ -12,7 +11,7 @@ import curses
 import curses.wrapper
 
 import potcommun
-from potcommun import getAmountAsString
+from potcommun import getAmountAsString, getAmountAsInt
 import sqlstorage
 from forms import *
 
@@ -216,17 +215,7 @@ class RefundEditForm(BaseForm):
         if action == "ACCEPT":
             try:
                 amount = self.amountField.getUserInput().strip()
-                if len(amount) > 0:
-                    RE = ur"^ *(\d+)(?:[,.](\d{1,2}))?(?: *€? *)?$"
-                    result = re.findall(RE, amount)
-                    euros = result[0][0]
-                    cents = result[0][1]
-                    if len(cents) == 0:
-                        cents = 0
-
-                    amount = int(euros) * 100 + int(cents)
-                else:
-                    amount = 0
+                amount = getAmountAsInt(amount)
             except IndexError:
                 self.errorString = u"Veuillez entrer un montant positif valide (15.55 par exemple)."
                 self.errorField.setText(self.errorString, RED | curses.A_BOLD)
@@ -780,18 +769,7 @@ class ItemEditForm(BaseForm):
                 self.item.label = self.labelField.getUserInput()
 
                 amount = self.amountField.getUserInput().strip()
-                if len(amount) > 0:
-                    RE = ur"^ *(\d+)(?:[,.](\d{1,2}))?(?: *€? *)?$"
-                    result = re.findall(RE, amount)
-                    euros = result[0][0]
-                    cents = result[0][1]
-                    if len(cents) == 0:
-                        cents = 0
-
-                    amount = int(euros) * 100 + int(cents)
-                else:
-                    amount = 0
-                    
+                amount = getAmountAsInt(amount)                    
                 self.item.amount = amount
                 self.item.persons = self.personsField.persons
 
@@ -852,18 +830,7 @@ class PaymentEditForm(BaseForm):
         if action == "ACCEPT":
             try:
                 amount = self.amountField.getUserInput().strip()
-                if len(amount) > 0:
-                    RE = ur"^ *(\d+)(?:[,.](\d{1,2}))?(?: *€? *)?$"
-                    result = re.findall(RE, amount)
-                    euros = result[0][0]
-                    cents = result[0][1]
-                    if len(cents) == 0:
-                        cents = 0
-
-                    amount = int(euros) * 100 + int(cents)
-                else:
-                    amount = 0
-
+                amount = getAmountAsInt(amount)
                 self.payment.amount = amount
                 self.payment.persons = self.personsField.persons
 
