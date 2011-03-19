@@ -1,14 +1,30 @@
 # -*- coding: utf-8 -*-
 from __future__ import division
 import warnings
-
 __version__ = "1.0"
+import re
 
 def getAmountAsString(amount):
     if amount < 0:
         return u"%d,%02d €" % ((amount + 99) // 100, -amount % 100)
     else:
         return u"%d,%02d €" % (amount // 100, amount % 100)
+
+def getAmountAsInt(amountAsString):
+    RE = ur"^ *(\d{1,9})(?:[,.](\d{1,2}))?(?: *€? *)?$"
+
+    if len(amountAsString) > 0:
+        result = re.findall(RE, amountAsString)
+        euros = result[0][0]
+        cents = result[0][1]
+        if len(cents) == 0:
+            cents = 0
+
+        amount = int(euros) * 100 + int(cents)
+    else:
+        amount = 0
+
+    return amount
 
 class DebtManager(object):
     """
