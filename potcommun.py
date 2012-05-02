@@ -18,9 +18,9 @@ def getAmountAsInt(amountAsString):
         euros = result[0][0]
         cents = result[0][1]
         if len(cents) == 0:
-            cents = 0
+            cents = "0"
 
-        amount = int(euros) * 100 + int(cents)
+        amount = int(euros) * 100 + (int(cents) if len(cents) == 2 else int(cents) * 10)
     else:
         amount = 0
 
