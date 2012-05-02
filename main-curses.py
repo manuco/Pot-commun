@@ -149,7 +149,10 @@ class DebtManagerForm(BaseForm):
         self.outlays = self.getOutlays()
         self.menu.refresh(self.outlays)
         self.menu.setTitle(u"Pot commun : %s" % self.dm.name)
-        self.statsLabel.setText(self.getStats())
+        try:
+            self.statsLabel.setText(self.getStats())
+        except ZeroDivisionError:
+            self.statsLabel.setText(u"Soldes impossibles à calculer, erreur de répartition.")
 
     def displayReport(self):
         curses.def_prog_mode()
