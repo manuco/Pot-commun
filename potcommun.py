@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import division
 import warnings
-__version__ = "1.0"
 import re
+
+__version__ = "1.0"
 
 def getAmountAsString(amount):
     if amount < 0:
         return u"%d,%02d €" % ((amount + 99) // 100, -amount % 100)
     else:
         return u"%d,%02d €" % (amount // 100, amount % 100)
+
 
 def getAmountAsInt(amountAsString):
     RE = ur"^ *(\d{1,9})(?:[,.](\d{1,2}))?(?: *€? *)?$"
@@ -25,6 +27,7 @@ def getAmountAsInt(amountAsString):
         amount = 0
 
     return amount
+
 
 class DebtManager(object):
     """
