@@ -560,6 +560,9 @@ class AbstractPayment(object):
     def computeAmountPerPerson(self):
         results = {}
         divisor = len(self.persons)
+        if divisor == 0:
+            raise ValueError((u"%s : aucune personne affectée à cette dépense" % self.label).encode("utf-8"))
+            
         roundingError = self.amount - ((self.amount // divisor) * divisor)
         for person in self.persons:
             amount = self.amount // divisor + (1 if roundingError > 0 else 0)
