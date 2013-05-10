@@ -153,6 +153,8 @@ class DebtManagerForm(BaseForm):
             self.statsLabel.setText(self.getStats())
         except ZeroDivisionError:
             self.statsLabel.setText(u"Soldes impossibles à calculer, erreur de répartition.")
+        except Exception, e:
+            self.statsLabel.setText(u"Soldes impossibles à calculer : %s." % e.args[0].decode("utf-8"))
 
     def displayReport(self):
         curses.def_prog_mode()
